@@ -39,6 +39,15 @@ const proxyConfig = {
       'Referer': 'https://stockapp.finance.qq.com/',
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
     }
+  },
+  '/api/ths': {
+    target: 'https://stockpage.10jqka.com.cn',
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/api\/ths/, ''),
+    headers: {
+      'Referer': 'https://stockpage.10jqka.com.cn/',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+    }
   }
 }
 

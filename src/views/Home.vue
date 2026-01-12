@@ -14,6 +14,12 @@
         </div>
 
         <div class="header-actions">
+          <button class="action-btn" @click="router.push('/company-parser')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M4 5H20M4 12H20M4 19H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>股票解析</span>
+          </button>
           <button class="action-btn" @click="handleRefresh" :disabled="stockStore.loading">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" :class="{ 'spin': stockStore.loading }">
               <path d="M21 2V8M21 8H15M21 8L18 5.5C16.5 4 14.5 3 12 3C7.03 3 3 7.03 3 12C3 16.97 7.03 21 12 21C15.5 21 18.5 19 20 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -127,6 +133,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useStockStore } from '@/stores/stock'
 import { useDialog, useMessage } from 'naive-ui'
 import StockSearch from '@/components/StockSearch.vue'
@@ -135,6 +142,7 @@ import StockList from '@/components/StockList.vue'
 const stockStore = useStockStore()
 const dialog = useDialog()
 const message = useMessage()
+const router = useRouter()
 
 const showSettings = ref(false)
 let refreshTimer = null

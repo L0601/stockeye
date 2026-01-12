@@ -394,6 +394,155 @@ export async function searchStock(keyword) {
   }
 }
 
+function normalizeCompanySymbol(symbol, market) {
+  const raw = String(symbol || '').trim().toUpperCase()
+  if (!raw) return ''
+
+  if (market === MARKET_TYPE.HK) {
+    return raw.startsWith('HK') ? raw : `HK${raw}`
+  }
+
+  if (market === MARKET_TYPE.US) {
+    return raw.startsWith('US') ? raw : `US${raw}`
+  }
+
+  if (market === MARKET_TYPE.CN) {
+    if (raw.startsWith('SH') || raw.startsWith('SZ')) {
+      return raw.slice(2)
+    }
+  }
+
+  return raw
+}
+
+export async function getCompanyPage(symbol, market = MARKET_TYPE.CN) {
+  const normalized = normalizeCompanySymbol(symbol, market)
+  if (!normalized) return ''
+
+  const pageSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  const url = `/api/ths/${pageSymbol}/company/`
+  const response = await request.get(url, { responseType: 'text' })
+  return response.data
+}
+
+function parseJsonpPayload(text) {
+  const match = String(text || '').match(/\((\{.*\})\)\s*$/)
+  if (!match || !match[1]) return null
+  try {
+    return JSON.parse(match[1])
+  } catch (error) {
+    console.error('JSONP解析失败:', error)
+    return null
+  }
+}
+
+function loadJsonp(url, callbackName) {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      reject(new Error('JSONP只能在浏览器环境中使用'))
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      cleanup()
+      reject(new Error('JSONP请求超时'))
+    }, 8000)
+
+    const cleanup = () => {
+      clearTimeout(timeoutId)
+      if (script && script.parentNode) {
+        script.parentNode.removeChild(script)
+      }
+      try {
+        delete window[callbackName]
+      } catch (error) {
+        window[callbackName] = undefined
+      }
+    }
+
+    const script = document.createElement('script')
+    window[callbackName] = (data) => {
+      cleanup()
+      resolve(data)
+    }
+    script.src = url
+    script.async = true
+    script.onerror = () => {
+      cleanup()
+      reject(new Error('JSONP加载失败'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
+export async function getCompanyMetrics(symbol, market = MARKET_TYPE.HK) {
+  const normalized = normalizeCompanySymbol(symbol, market)
+  if (!normalized) return null
+
+  const toNumber = (value) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : null
+  }
+
+  if (![MARKET_TYPE.HK, MARKET_TYPE.CN, MARKET_TYPE.US].includes(market)) {
+    return null
+  }
+
+  const prefix = market === MARKET_TYPE.CN ? 'hs' : market === MARKET_TYPE.US ? 'usa' : 'hk'
+  const realheadSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  const callbackName = `quotebridge_v6_realhead_${prefix}_${realheadSymbol}_last`
+  const url = `https://d.10jqka.com.cn/v6/realhead/${prefix}_${realheadSymbol}/last.js`
+  let payload = null
+  try {
+    payload = await loadJsonp(url, callbackName)
+  } catch (error) {
+    console.error('JSONP加载失败:', error)
+  }
+
+  const record = payload?.items
+
+  if (!record) return null
+
+  const current = toNumber(record['10'])
+  const open = toNumber(record['7'])
+  const yesterday = toNumber(record['6']) ?? toNumber(record['70'])
+  const high = toNumber(record['8'])
+  const low = toNumber(record['9'])
+  const volume = toNumber(record['13'])
+  const amount = toNumber(record['19'])
+  const turnover = toNumber(record['1968584'])
+  const changePercent = toNumber(record['199112'])
+  const amplitude = toNumber(record['526792'])
+  const totalMarketCap = toNumber(record['3541450'])
+  const floatMarketCap = toNumber(record['3475914'])
+  let pe = toNumber(record['2942'])
+  const pb = toNumber(record['1149395'])
+  const peStatic = toNumber(record['134152'])
+  if (pe === null && record['profit'] === '否') {
+    pe = '亏损'
+  }
+
+  return {
+    name: record.name || '',
+    current,
+    open,
+    yesterday,
+    high,
+    low,
+    volume,
+    amount,
+    turnover,
+    amplitude,
+    changePercent,
+    totalMarketCap,
+    floatMarketCap,
+    pe,
+    pb,
+    peStatic
+  }
+}
+
+
 // 批量获取股票数据
 export async function batchGetStocks(stocks) {
   const promises = stocks.map(stock =>

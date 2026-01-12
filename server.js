@@ -55,6 +55,17 @@ app.use('/api/qqquote', createProxyMiddleware({
   }
 }))
 
+// 代理同花顺公司页
+app.use('/api/ths', createProxyMiddleware({
+  target: 'https://stockpage.10jqka.com.cn',
+  changeOrigin: true,
+  pathRewrite: { '^/api/ths': '' },
+  headers: {
+    'Referer': 'https://stockpage.10jqka.com.cn/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+  }
+}))
+
 // 配置静态文件服务 - 提供dist目录下的文件
 app.use(express.static(path.join(__dirname, 'dist')))
 

@@ -10,6 +10,11 @@ const routes = [
     path: '/detail/:symbol',
     name: 'StockDetail',
     component: () => import('@/views/StockDetail.vue')
+  },
+  {
+    path: '/company-parser',
+    name: 'CompanyParser',
+    component: () => import('@/views/CompanyParser.vue')
   }
 ]
 
