@@ -1,0 +1,584 @@
+<template>
+  <div class="detail-container">
+    <n-layout>
+      <n-layout-header class="detail-header">
+        <div class="header-content">
+          <n-space align="center">
+            <n-button class="back-button" text @click="handleBack">
+              <span class="back-icon">←</span> 返回
+            </n-button>
+            <h2 class="stock-title">{{ stockInfo.name || symbol }}</h2>
+            <n-tag v-if="stockInfo.market" :type="getMarketTagType(stockInfo.market)" size="small">
+              {{ getMarketName(stockInfo.market) }}
+            </n-tag>
+          </n-space>
+          <n-button class="refresh-button" @click="loadData" :loading="loading" type="primary" round>
+            <template #icon>
+              <span>🔄</span>
+            </template>
+            刷新数据
+          </n-button>
+        </div>
+      </n-layout-header>
+
+      <n-layout-content class="detail-content">
+        <n-spin :show="loading">
+          <n-space vertical size="large">
+            <!-- 基本信息 -->
+            <n-card title="实时行情" class="info-card">
+              <n-space vertical size="large">
+                <!-- 价格信息 -->
+                <div class="price-section">
+                  <div class="current-price">
+                    <span class="price-label">当前价</span>
+                    <span class="price-value" :class="stockInfo.change >= 0 ? 'price-up' : 'price-down'">
+                      {{ stockInfo.current ? stockInfo.current.toFixed(2) : '-' }}
+                    </span>
+                    <n-tag
+                      v-if="stockInfo.changePercent"
+                      :type="stockInfo.change >= 0 ? 'error' : 'success'"
+                      size="medium"
+                      class="change-tag"
+                    >
+                      {{ stockInfo.change >= 0 ? '+' : '' }}{{ stockInfo.change?.toFixed(2) }} ({{ stockInfo.changePercent }}%)
+                    </n-tag>
+                  </div>
+                </div>
+
+                <!-- 其他数据 -->
+                <n-grid :cols="4" :x-gap="24" :y-gap="20">
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">昨收</span>
+                      <span class="info-value">{{ stockInfo.yesterday?.toFixed(2) || '-' }}</span>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">最高</span>
+                      <span class="info-value price-up">{{ stockInfo.high?.toFixed(2) || '-' }}</span>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">最低</span>
+                      <span class="info-value price-down">{{ stockInfo.low?.toFixed(2) || '-' }}</span>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">成交量</span>
+                      <span class="info-value">{{ formatVolume(stockInfo.volume) }}</span>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">成交额</span>
+                      <span class="info-value">{{ formatAmount(stockInfo.amount) }}</span>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">状态</span>
+                      <n-tag :type="stockInfo.status === 'trading' ? 'success' : 'default'" size="small">
+                        {{ stockInfo.status === 'trading' ? '交易中' : '已闭市' }}
+                      </n-tag>
+                    </div>
+                  </n-grid-item>
+
+                  <n-grid-item>
+                    <div class="info-item">
+                      <span class="info-label">更新时间</span>
+                      <span class="info-value small">{{ stockInfo.updateTime || '-' }}</span>
+                    </div>
+                  </n-grid-item>
+                </n-grid>
+              </n-space>
+            </n-card>
+
+            <!-- K线图 - 仅A股支持 -->
+            <n-card v-if="stockInfo.market === 'CN'" title="K线图" class="chart-card">
+              <div v-if="klineData.length > 0" class="chart-container">
+                <stock-chart :data="klineData" />
+              </div>
+              <n-empty
+                v-else
+                description="暂无K线数据"
+                size="large"
+              />
+            </n-card>
+
+            <!-- 港股/美股不支持提示 -->
+            <n-card v-else title="K线图" class="chart-card">
+              <n-alert type="warning" class="warning-alert">
+                <template #icon>
+                  <span style="font-size: 20px;">⚠️</span>
+                </template>
+                {{ getMarketName(stockInfo.market) }}暂不支持K线数据查看，仅支持A股K线图
+              </n-alert>
+            </n-card>
+
+            <!-- 技术指标 - 仅A股支持 -->
+            <n-card v-if="stockInfo.market === 'CN'" title="技术指标" class="indicator-card">
+              <n-grid :cols="3" :x-gap="24" :y-gap="20">
+                <n-grid-item>
+                  <div class="indicator-item">
+                    <span class="indicator-label">5日涨跌</span>
+                    <div class="indicator-value" :class="change5d >= 0 ? 'value-up' : 'value-down'">
+                      {{ change5d ? (change5d >= 0 ? '+' : '') + change5d.toFixed(2) + '%' : '-' }}
+                    </div>
+                  </div>
+                </n-grid-item>
+                <n-grid-item>
+                  <div class="indicator-item">
+                    <span class="indicator-label">20日涨跌</span>
+                    <div class="indicator-value" :class="change20d >= 0 ? 'value-up' : 'value-down'">
+                      {{ change20d ? (change20d >= 0 ? '+' : '') + change20d.toFixed(2) + '%' : '-' }}
+                    </div>
+                  </div>
+                </n-grid-item>
+                <n-grid-item>
+                  <div class="indicator-item">
+                    <span class="indicator-label">120日涨跌</span>
+                    <div class="indicator-value" :class="change120d >= 0 ? 'value-up' : 'value-down'">
+                      {{ change120d ? (change120d >= 0 ? '+' : '') + change120d.toFixed(2) + '%' : '-' }}
+                    </div>
+                  </div>
+                </n-grid-item>
+              </n-grid>
+            </n-card>
+
+            <!-- 港股/美股不支持提示 -->
+            <n-card v-else title="技术指标" class="indicator-card">
+              <n-alert type="warning" class="warning-alert">
+                <template #icon>
+                  <span style="font-size: 20px;">⚠️</span>
+                </template>
+                {{ getMarketName(stockInfo.market) }}暂不支持技术指标查看，仅支持A股
+              </n-alert>
+            </n-card>
+          </n-space>
+        </n-spin>
+      </n-layout-content>
+    </n-layout>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { getStockQuote, getStockKLine } from '@/api/stock'
+import { storage } from '@/utils/storage'
+import StockChart from '@/components/StockChart.vue'
+
+const route = useRoute()
+const router = useRouter()
+
+const symbol = ref(route.params.symbol)
+const stockInfo = ref({})
+const klineData = ref([])
+const loading = ref(false)
+
+const change5d = computed(() => {
+  if (klineData.value.length < 6) return null
+  const current = klineData.value[klineData.value.length - 1].close
+  const past = klineData.value[klineData.value.length - 6].close
+  return ((current - past) / past * 100)
+})
+
+const change20d = computed(() => {
+  if (klineData.value.length < 21) return null
+  const current = klineData.value[klineData.value.length - 1].close
+  const past = klineData.value[klineData.value.length - 21].close
+  return ((current - past) / past * 100)
+})
+
+const change120d = computed(() => {
+  if (klineData.value.length < 121) return null
+  const current = klineData.value[klineData.value.length - 1].close
+  const past = klineData.value[klineData.value.length - 121].close
+  return ((current - past) / past * 100)
+})
+
+onMounted(() => {
+  loadData()
+})
+
+const loadData = async () => {
+  loading.value = true
+  try {
+    // 从本地存储获取股票信息
+    const stocks = storage.getStocks()
+    const stock = stocks.find(s => s.symbol === symbol.value)
+
+    if (stock) {
+      // 获取实时数据
+      const quote = await getStockQuote(stock.symbol, stock.market)
+      if (quote) {
+        stockInfo.value = { ...stock, ...quote }
+      }
+
+      // 获取K线数据
+      const kline = await getStockKLine(stock.symbol, stock.market)
+      if (kline && kline.length > 0) {
+        klineData.value = kline
+      }
+    }
+  } catch (error) {
+    console.error('加载数据失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleBack = () => {
+  router.push('/')
+}
+
+const formatVolume = (volume) => {
+  if (!volume) return '-'
+  if (volume >= 100000000) {
+    return (volume / 100000000).toFixed(2) + '亿'
+  }
+  if (volume >= 10000) {
+    return (volume / 10000).toFixed(2) + '万'
+  }
+  return volume.toFixed(0)
+}
+
+const formatAmount = (amount) => {
+  if (!amount) return '-'
+  if (amount >= 100000000) {
+    return (amount / 100000000).toFixed(2) + '亿'
+  }
+  if (amount >= 10000) {
+    return (amount / 10000).toFixed(2) + '万'
+  }
+  return amount.toFixed(2)
+}
+
+const getChangeType = (change) => {
+  if (!change) return 'default'
+  return change >= 0 ? 'error' : 'success'
+}
+
+const getMarketName = (market) => {
+  const names = {
+    CN: 'A股',
+    HK: '港股',
+    US: '美股'
+  }
+  return names[market] || market
+}
+
+const getMarketTagType = (market) => {
+  const types = {
+    CN: 'info',
+    HK: 'warning',
+    US: 'success'
+  }
+  return types[market] || 'default'
+}
+</script>
+
+<style scoped>
+.detail-container {
+  min-height: 100vh;
+  background: #fafafa;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.detail-container::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.detail-container::after {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.03) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.03) 0%, transparent 50%),
+              radial-gradient(circle at 40% 20%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  padding: 20px 48px !important;
+  height: auto !important;
+  border: none !important;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.back-button {
+  font-size: 16px;
+  font-weight: 600;
+  color: #6366f1;
+  transition: all 0.3s ease;
+  letter-spacing: -0.01em;
+}
+
+.back-button:hover {
+  color: #4f46e5;
+  transform: translateX(-4px);
+}
+
+.back-icon {
+  font-size: 20px;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.back-button:hover .back-icon {
+  transform: translateX(-4px);
+}
+
+.stock-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #18181b;
+  letter-spacing: -0.02em;
+}
+
+.refresh-button {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #52525b !important;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.refresh-button:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #18181b !important;
+  transform: translateY(-1px);
+}
+
+.detail-content {
+  position: relative;
+  z-index: 2;
+  padding: 48px !important;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 卡片美化 */
+:deep(.n-card) {
+  border-radius: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 24px;
+}
+
+:deep(.n-card:hover) {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+:deep(.n-card-header) {
+  font-weight: 600;
+  font-size: 18px;
+  color: #18181b;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* 价格区域美化 */
+.price-section {
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.current-price {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.price-label {
+  font-size: 14px;
+  color: #71717a;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.price-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.price-up {
+  color: #ef4444;
+}
+
+.price-down {
+  color: #10b981;
+}
+
+.change-tag {
+  font-size: 16px;
+  padding: 6px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+/* 信息项美化 */
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #71717a;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.info-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #18181b;
+  letter-spacing: -0.01em;
+}
+
+.info-value.small {
+  font-size: 14px;
+  color: #52525b;
+  font-weight: 500;
+}
+
+/* 标签美化 */
+:deep(.n-tag) {
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 4px 12px;
+}
+
+/* K线图卡片美化 */
+.chart-container {
+  padding: 10px 0;
+}
+
+/* 技术指标美化 */
+.indicator-item {
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.indicator-item:hover {
+  transform: translateY(-2px);
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.indicator-label {
+  display: block;
+  font-size: 14px;
+  color: #71717a;
+  font-weight: 500;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.indicator-value {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.value-up {
+  color: #ef4444;
+}
+
+.value-down {
+  color: #10b981;
+}
+
+/* 警告提示美化 */
+.warning-alert {
+  padding: 20px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 16px;
+  font-size: 15px;
+}
+
+:deep(.n-alert) {
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+:deep(.n-alert__icon) {
+  margin-right: 12px;
+}
+
+/* 网格美化 */
+:deep(.n-grid) {
+  gap: 24px;
+}
+
+/* 空状态美化 */
+:deep(.n-empty) {
+  padding: 60px 20px;
+}
+
+:deep(.n-empty__description) {
+  color: #71717a;
+  font-size: 14px;
+}
+</style>
