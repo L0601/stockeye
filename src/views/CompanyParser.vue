@@ -279,12 +279,13 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { getCompanyMetrics, getCompanyPage, getFinancePage, MARKET_TYPE } from '@/api/stock'
 
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 
 const symbol = ref('')
@@ -696,6 +697,14 @@ const handleFetch = async () => {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  const querySymbol = route.query.symbol
+  if (typeof querySymbol === 'string' && querySymbol.trim()) {
+    symbol.value = querySymbol.trim()
+    handleFetch()
+  }
+})
 
 const toggleSeries = (key) => {
   const current = visibleSeries.value

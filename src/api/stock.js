@@ -419,7 +419,14 @@ export async function getCompanyPage(symbol, market = MARKET_TYPE.CN) {
   const normalized = normalizeCompanySymbol(symbol, market)
   if (!normalized) return ''
 
-  const pageSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  let pageSymbol = market === MARKET_TYPE.US
+    ? normalized.replace(/^US/i, '')
+    : normalized
+  if (market === MARKET_TYPE.HK) {
+    const stripped = pageSymbol.replace(/^HK/i, '')
+    const numeric = stripped.replace(/^0+/, '')
+    pageSymbol = /^\d+$/.test(stripped) ? `HK${numeric || '0'}` : pageSymbol
+  }
   const url = `/api/ths/${pageSymbol}/company/`
   const response = await request.get(url, { responseType: 'text' })
   return response.data
@@ -429,7 +436,14 @@ export async function getFinancePage(symbol, market = MARKET_TYPE.HK) {
   const normalized = normalizeCompanySymbol(symbol, market)
   if (!normalized) return ''
 
-  const pageSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  let pageSymbol = market === MARKET_TYPE.US
+    ? normalized.replace(/^US/i, '')
+    : normalized
+  if (market === MARKET_TYPE.HK) {
+    const stripped = pageSymbol.replace(/^HK/i, '')
+    const numeric = stripped.replace(/^0+/, '')
+    pageSymbol = /^\d+$/.test(stripped) ? `HK${numeric || '0'}` : pageSymbol
+  }
   const indexUrl = `/api/ths/${pageSymbol}/finance/`
   const indexResponse = await request.get(indexUrl, { responseType: 'text' })
   const indexHtml = indexResponse.data
@@ -537,14 +551,46 @@ export async function getCompanyMetrics(symbol, market = MARKET_TYPE.HK) {
   }
 
   const prefix = market === MARKET_TYPE.CN ? 'hs' : market === MARKET_TYPE.US ? 'usa' : 'hk'
-  const realheadSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
-  const callbackName = `quotebridge_v6_realhead_${prefix}_${realheadSymbol}_last`
-  const url = `https://d.10jqka.com.cn/v6/realhead/${prefix}_${realheadSymbol}/last.js`
+  const primarySymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  const fallbackSymbol = market === MARKET_TYPE.HK ? normalized.replace(/^HK/i, '') : ''
+  const strippedSymbol = market === MARKET_TYPE.HK
+    ? (fallbackSymbol || primarySymbol).replace(/^0+/, '')
+    : ''
+  const hkStrippedSymbol = market === MARKET_TYPE.HK && strippedSymbol ? `HK${strippedSymbol}` : ''
+
+  const fetchJsonp = async (realheadSymbol) => {
+    const callbackName = `quotebridge_v6_realhead_${prefix}_${realheadSymbol}_last`
+    const url = `https://d.10jqka.com.cn/v6/realhead/${prefix}_${realheadSymbol}/last.js`
+    return await loadJsonp(url, callbackName)
+  }
+
+  const candidates = []
+  const seen = new Set()
+  const pushCandidate = (value) => {
+    if (!value || seen.has(value)) return
+    seen.add(value)
+    candidates.push(value)
+  }
+
+  pushCandidate(primarySymbol)
+  if (market === MARKET_TYPE.HK) {
+    pushCandidate(fallbackSymbol)
+    pushCandidate(strippedSymbol)
+    pushCandidate(hkStrippedSymbol)
+  }
+
   let payload = null
-  try {
-    payload = await loadJsonp(url, callbackName)
-  } catch (error) {
-    console.error('JSONP加载失败:', error)
+  for (const candidate of candidates) {
+    try {
+      payload = await fetchJsonp(candidate)
+      break
+    } catch (error) {
+      payload = null
+    }
+  }
+
+  if (!payload) {
+    console.error('JSONP加载失败')
   }
 
   const record = payload?.items

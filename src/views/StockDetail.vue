@@ -12,12 +12,17 @@
               {{ getMarketName(stockInfo.market) }}
             </n-tag>
           </n-space>
-          <n-button class="refresh-button" @click="loadData" :loading="loading" type="primary" round>
-            <template #icon>
-              <span>🔄</span>
-            </template>
-            刷新数据
-          </n-button>
+          <n-space align="center" size="small">
+            <n-button class="parser-button" @click="handleGoParser" type="info" round>
+              公司指标解析
+            </n-button>
+            <n-button class="refresh-button" @click="loadData" :loading="loading" type="primary" round>
+              <template #icon>
+                <span>🔄</span>
+              </template>
+              刷新数据
+            </n-button>
+          </n-space>
         </div>
       </n-layout-header>
 
@@ -240,6 +245,27 @@ const handleBack = () => {
   router.push('/')
 }
 
+const handleGoParser = () => {
+  const raw = String(symbol.value || '').trim().toUpperCase()
+  const market = stockInfo.value.market
+  let targetSymbol = raw
+
+  if (market === 'HK' && raw && !raw.startsWith('HK')) {
+    targetSymbol = `HK${raw}`
+  } else if (market === 'US') {
+    targetSymbol = raw.replace(/^US/, '')
+  } else if (market === 'CN' && (raw.startsWith('SH') || raw.startsWith('SZ'))) {
+    targetSymbol = raw.slice(2)
+  }
+
+  router.push({
+    name: 'CompanyParser',
+    query: {
+      symbol: targetSymbol
+    }
+  })
+}
+
 const formatVolume = (volume) => {
   if (!volume) return '-'
   if (volume >= 100000000) {
@@ -384,6 +410,21 @@ const getMarketTagType = (market) => {
   background: rgba(0, 0, 0, 0.06) !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
   color: #18181b !important;
+  transform: translateY(-1px);
+}
+
+.parser-button {
+  background: rgba(79, 70, 229, 0.1) !important;
+  border: 1px solid rgba(79, 70, 229, 0.2) !important;
+  color: #4f46e5 !important;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.parser-button:hover {
+  background: rgba(79, 70, 229, 0.18) !important;
+  border-color: rgba(79, 70, 229, 0.3) !important;
+  color: #4338ca !important;
   transform: translateY(-1px);
 }
 
