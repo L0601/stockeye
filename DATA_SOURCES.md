@@ -76,3 +76,32 @@ The code can parse the company page text for these labels when needed:
 - "成交额" -> Amount
 
 Note: The primary source for these values is the `realhead` endpoint. The HTML fallback exists to avoid empty UI if API data is missing.
+
+## 4) Finance page (经营数据)
+
+Financial statement data is parsed from the finance iframe page. The outer finance page is used only to locate the iframe URL.
+
+### Endpoints
+
+- Finance index page:
+  - A-share: `https://stockpage.10jqka.com.cn/{SYMBOL}/finance/`
+  - HK: `https://stockpage.10jqka.com.cn/{SYMBOL}/finance/`
+  - US: `https://stockpage.10jqka.com.cn/{SYMBOL}/finance/`
+- Finance iframe page (resolved from the index HTML):
+  - Often `https://stockpage.10jqka.com.cn/basicweb/{CODE}/{SYMBOL}/finance.html#stockpage`
+  - A-share may point to `https://basic.10jqka.com.cn/{SYMBOL}/finance.html#stockpage`
+
+### Field mapping
+
+The iframe page contains a JSON payload in `#keyindex`:
+
+- `title` -> Row names (科目)
+- `report[0]` -> Period headers (报表年结日/季度日期)
+- `report[i]` -> Values for the `title[i]` row
+
+Fields used for charts/copy:
+
+- `营业收入`
+- `归母净利润`
+- `毛利`
+- `营业利润率`

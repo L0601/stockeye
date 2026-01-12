@@ -19,3 +19,4 @@
 lsof -t -i:3000 | xargs kill -9 2>/dev/null; cd ~/Desktop/front-stock && npm run dev -- --port 3000
 
 1. 解析数据 https://stockpage.10jqka.com.cn/HK9988/company/  获取公司基本面数据
+2. 解析经营数据  https://stockpage.10jqka.com.cn/HK9988/finance/  

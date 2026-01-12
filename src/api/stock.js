@@ -425,6 +425,54 @@ export async function getCompanyPage(symbol, market = MARKET_TYPE.CN) {
   return response.data
 }
 
+export async function getFinancePage(symbol, market = MARKET_TYPE.HK) {
+  const normalized = normalizeCompanySymbol(symbol, market)
+  if (!normalized) return ''
+
+  const pageSymbol = market === MARKET_TYPE.US ? normalized.replace(/^US/, '') : normalized
+  const indexUrl = `/api/ths/${pageSymbol}/finance/`
+  const indexResponse = await request.get(indexUrl, { responseType: 'text' })
+  const indexHtml = indexResponse.data
+
+  if (!indexHtml) return ''
+
+  const iframeMatch =
+    indexHtml.match(/id=\"data-ifm\"[^>]+src=\"([^\"]+)\"/) ||
+    indexHtml.match(/id=\"dataifm\"[^>]+src=\"([^\"]+)\"/) ||
+    indexHtml.match(/<iframe[^>]+src=\"([^\"]+finance[^\"]*)\"/)
+  if (!iframeMatch || !iframeMatch[1]) return ''
+
+  let iframeUrl = iframeMatch[1]
+  if (iframeUrl.startsWith('//')) {
+    iframeUrl = `https:${iframeUrl}`
+  }
+
+  if (iframeUrl.startsWith('http://')) {
+    iframeUrl = iframeUrl.replace('http://', 'https://')
+  }
+
+  if (iframeUrl.startsWith('#')) {
+    return ''
+  }
+
+  if (iframeUrl.includes('#')) {
+    iframeUrl = iframeUrl.split('#')[0]
+  }
+
+  if (iframeUrl.startsWith('https://stockpage.10jqka.com.cn')) {
+    iframeUrl = iframeUrl.replace('https://stockpage.10jqka.com.cn', '/api/ths')
+  }
+  if (iframeUrl.startsWith('https://basic.10jqka.com.cn')) {
+    iframeUrl = iframeUrl.replace('https://basic.10jqka.com.cn', '/api/ths-basic-html')
+  }
+  if (iframeUrl.startsWith('/') && !iframeUrl.startsWith('/api/ths')) {
+    iframeUrl = `/api/ths${iframeUrl}`
+  }
+
+  const iframeResponse = await request.get(iframeUrl, { responseType: 'text' })
+  return iframeResponse.data
+}
+
 function parseJsonpPayload(text) {
   const match = String(text || '').match(/\((\{.*\})\)\s*$/)
   if (!match || !match[1]) return null

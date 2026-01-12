@@ -157,6 +157,118 @@
           <p>填写代码后点击“开始解析”</p>
         </div>
 
+        <div v-if="financeChart" class="finance-panel">
+          <div class="section-header">
+            <span>经营趋势</span>
+          </div>
+          <div class="line-card combo">
+            <div class="line-head">
+              <span>营收 / 归母净利润 / 营业利润率</span>
+              <div class="line-badges">
+                <button
+                  class="badge revenue"
+                  :class="{ inactive: !visibleSeries.revenue }"
+                  type="button"
+                  @click="toggleSeries('revenue')"
+                >
+                  营收 {{ financeChart.series.revenue.latest }}
+                </button>
+                <button
+                  class="badge profit"
+                  :class="{ inactive: !visibleSeries.profit }"
+                  type="button"
+                  @click="toggleSeries('profit')"
+                >
+                  归母净利润 {{ financeChart.series.profit.latest }}
+                </button>
+                <button
+                  class="badge margin"
+                  :class="{ inactive: !visibleSeries.margin }"
+                  type="button"
+                  @click="toggleSeries('margin')"
+                >
+                  营业利润率 {{ financeChart.series.margin.latest }}
+                </button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" @click="hideTooltip">
+              <rect x="0" y="0" width="100" height="100" class="chart-bg" />
+              <g class="chart-grid">
+                <line x1="0" y1="20" x2="100" y2="20" />
+                <line x1="0" y1="40" x2="100" y2="40" />
+                <line x1="0" y1="60" x2="100" y2="60" />
+                <line x1="0" y1="80" x2="100" y2="80" />
+              </g>
+              <line x1="0" y1="100" x2="100" y2="100" class="chart-axis" />
+              <polyline
+                v-if="visibleSeries.revenue"
+                :points="financeChart.series.revenue.polyline"
+                class="line revenue"
+              />
+              <polyline
+                v-if="visibleSeries.profit"
+                :points="financeChart.series.profit.polyline"
+                class="line profit"
+              />
+              <polyline
+                v-if="visibleSeries.margin"
+                :points="financeChart.series.margin.polyline"
+                class="line margin"
+              />
+              <circle
+                v-for="(point, index) in financeChart.series.revenue.points"
+                v-if="visibleSeries.revenue"
+                :key="`rev-${index}`"
+                :cx="point.x"
+                :cy="point.y"
+                r="1.6"
+                class="dot revenue"
+                @click.stop="showTooltip(point, '营收')"
+              >
+                <title>{{ point.label }} | 营收 {{ point.value }}</title>
+              </circle>
+              <circle
+                v-for="(point, index) in financeChart.series.profit.points"
+                v-if="visibleSeries.profit"
+                :key="`profit-${index}`"
+                :cx="point.x"
+                :cy="point.y"
+                r="1.6"
+                class="dot profit"
+                @click.stop="showTooltip(point, '归母净利润')"
+              >
+                <title>{{ point.label }} | 归母净利润 {{ point.value }}</title>
+              </circle>
+              <circle
+                v-for="(point, index) in financeChart.series.margin.points"
+                v-if="visibleSeries.margin"
+                :key="`margin-${index}`"
+                :cx="point.x"
+                :cy="point.y"
+                r="1.6"
+                class="dot margin"
+                @click.stop="showTooltip(point, '营业利润率')"
+              >
+                <title>{{ point.label }} | 营业利润率 {{ point.value }}</title>
+              </circle>
+              </svg>
+              <div
+                v-if="tooltip.visible"
+                class="chart-tooltip"
+                :style="{ left: `${tooltip.x}%`, top: `${tooltip.y}%` }"
+              >
+                {{ tooltip.text }}
+              </div>
+            </div>
+            <div class="line-axis">
+              <span>{{ financeChart.periods[0] }}</span>
+              <span>{{ financeChart.periods[financeChart.periods.length - 1] }}</span>
+            </div>
+          </div>
+          <div class="chart-note">注：三条线分别按自身区间归一化，展示趋势变化。</div>
+        </div>
+
         <div v-if="displayText" class="copy-block">
           <div class="copy-label">可复制内容</div>
           <pre class="copy-text">{{ displayText }}</pre>
@@ -170,7 +282,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getCompanyMetrics, getCompanyPage, MARKET_TYPE } from '@/api/stock'
+import { getCompanyMetrics, getCompanyPage, getFinancePage, MARKET_TYPE } from '@/api/stock'
 
 const router = useRouter()
 const message = useMessage()
@@ -179,6 +291,18 @@ const symbol = ref('')
 const loading = ref(false)
 const error = ref('')
 const result = ref(null)
+const financeData = ref(null)
+const visibleSeries = ref({
+  revenue: true,
+  profit: true,
+  margin: true
+})
+const tooltip = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  text: ''
+})
 
 const detectMarket = (value) => {
   const raw = String(value || '').trim().toUpperCase()
@@ -209,31 +333,99 @@ const normalizedPreview = computed(() => {
   return raw
 })
 
-const displayText = computed(() => {
+const formatFinanceValue = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return value ? String(value) : '-'
+  return formatLarge(num)
+}
+
+const formatFinancePercent = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return value ? String(value) : '-'
+  return `${num.toFixed(2)}%`
+}
+
+const parseFinanceNumber = (value) => {
+  if (value === null || value === undefined) return NaN
+  if (typeof value === 'number') return value
+  const raw = String(value).trim().replace(/,/g, '')
+  if (!raw || raw === '--') return NaN
+  if (raw.includes('%')) {
+    const percent = parseFloat(raw.replace('%', ''))
+    return Number.isFinite(percent) ? percent : NaN
+  }
+
+  let text = raw
+  let multiplier = 1
+  if (text.includes('万亿')) {
+    multiplier = 1e12
+    text = text.replace('万亿', '')
+  } else if (text.includes('亿')) {
+    multiplier = 1e8
+    text = text.replace('亿', '')
+  } else if (text.includes('万')) {
+    multiplier = 1e4
+    text = text.replace('万', '')
+  } else if (text.includes('千')) {
+    multiplier = 1e3
+    text = text.replace('千', '')
+  }
+
+  text = text.replace(/[^\d.+-]/g, '')
+  const num = parseFloat(text)
+  return Number.isFinite(num) ? num * multiplier : NaN
+}
+
+const pickFinanceRow = (rows, names) => {
+  for (const name of names) {
+    if (rows[name]) return rows[name]
+  }
+  return []
+}
+
+const summaryCopyText = computed(() => {
   if (!result.value) return ''
   const symbolText = symbol.value.trim().toUpperCase() || '-'
-  const fields = [
-    ['股票代码', symbolText],
-    ['所属行业', result.value.industry],
-    ['当前', result.value.current],
-    ['今开', result.value.open],
-    ['昨收', result.value.yesterday],
-    ['最高', result.value.high],
-    ['最低', result.value.low],
-    ['成交量', result.value.volume],
-    ['成交额', result.value.amount],
-    ['换手', result.value.turnover],
-    ['振幅', result.value.amplitude],
-    ['涨幅', result.value.changePercent],
-    ['总市值', result.value.totalMarketCap],
-    ['流通市值', result.value.floatMarketCap],
-    ['市盈率(动)', result.value.pe],
-    ['市盈率(静)', result.value.peStatic],
-    ['市净率', result.value.pb]
+  const lines = [
+    `股票代码: ${symbolText}`,
+    `所属行业: ${result.value.industry || '-'}`,
+    `行情: 当前 ${result.value.current || '-'} 今开 ${result.value.open || '-'} 昨收 ${result.value.yesterday || '-'} 最高 ${result.value.high || '-'} 最低 ${result.value.low || '-'}`,
+    `成交: 成交量 ${result.value.volume || '-'} 成交额 ${result.value.amount || '-'} 换手 ${result.value.turnover || '-'} 振幅 ${result.value.amplitude || '-'} 涨幅 ${result.value.changePercent || '-'}`,
+    `估值: 总市值 ${result.value.totalMarketCap || '-'} 流通市值 ${result.value.floatMarketCap || '-'} 市盈率(动) ${result.value.pe || '-'} 市盈率(静) ${result.value.peStatic || '-'} 市净率 ${result.value.pb || '-'}`
   ]
-  return fields
-    .map(([label, value]) => `${label}: ${value || '-'}`)
-    .join('\n')
+  return lines.join('\n')
+})
+
+const financeCopyText = computed(() => {
+  if (!financeData.value || financeData.value.periods.length === 0) return ''
+  const rows = financeData.value.rows
+  const revenue = pickFinanceRow(rows, ['营业收入', '营业总收入'])
+  const profit = pickFinanceRow(rows, ['归母净利润', '净利润'])
+  const gross = pickFinanceRow(rows, ['毛利', '营业毛利'])
+  const margin = pickFinanceRow(rows, ['营业利润率', '销售净利率', '销售利润率'])
+  const lines = ['财务数据:']
+
+  financeData.value.periods.forEach((period, index) => {
+    const type = period.endsWith('12-31') ? '年度' : '季度'
+    const revenueValue = formatFinanceValue(revenue[index])
+    const profitValue = formatFinanceValue(profit[index])
+    const grossValue = formatFinanceValue(gross[index])
+    const marginValue = formatFinancePercent(margin[index])
+    lines.push(`${period} ${type} 营业收入: ${revenueValue} 归母净利润: ${profitValue} 毛利: ${grossValue} 营业利润率: ${marginValue}`)
+  })
+
+  return lines.join('\n')
+})
+
+const displayText = computed(() => {
+  const parts = []
+  if (summaryCopyText.value) {
+    parts.push(summaryCopyText.value)
+  }
+  if (financeCopyText.value) {
+    parts.push(financeCopyText.value)
+  }
+  return parts.join('\n\n')
 })
 
 const formatLarge = (value) => {
@@ -326,9 +518,121 @@ const parseCompanyHtml = (html) => {
   }
 }
 
+const parseFinanceHtml = (html) => {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const keyIndex =
+    doc.querySelector('#keyindex')?.textContent?.trim() ||
+    doc.querySelector('#main')?.textContent?.trim()
+  if (!keyIndex) return null
+
+  let data = null
+  try {
+    data = JSON.parse(keyIndex)
+  } catch (err) {
+    console.error('解析财务数据失败:', err)
+    return null
+  }
+
+  if (!data?.title || !data?.report) return null
+
+  const periods = data.report[0] || []
+  const rows = {}
+  for (let i = 1; i < data.title.length; i += 1) {
+    const titleItem = data.title[i]
+    const rowName = Array.isArray(titleItem) ? titleItem[0] : titleItem
+    rows[rowName] = data.report[i] || []
+  }
+
+  return {
+    periods,
+    rows
+  }
+}
+
+const buildLineSeries = (rawValues, numericValues, formatter, labels) => {
+  const nums = numericValues.length ? numericValues : rawValues.map(value => Number(value))
+  const valid = nums.filter(Number.isFinite)
+  const min = valid.length ? Math.min(...valid) : 0
+  const max = valid.length ? Math.max(...valid) : 1
+  const range = max - min || 1
+  const len = rawValues.length || 1
+
+  const points = nums.map((num, index) => {
+    const x = len === 1 ? 50 : (index / (len - 1)) * 100
+    const y = Number.isFinite(num) ? 100 - ((num - min) / range) * 100 : 100
+    return {
+      x,
+      y,
+      value: formatter(rawValues[index]),
+      label: labels[index] || ''
+    }
+  })
+
+  return {
+    points,
+    polyline: points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' '),
+    latest: formatter(rawValues[len - 1])
+  }
+}
+
+const financeChart = computed(() => {
+  if (!financeData.value) return null
+
+  const periods = financeData.value.periods
+  if (!periods || periods.length === 0) return null
+
+  const rows = financeData.value.rows
+  const revenueRaw = pickFinanceRow(rows, ['营业收入', '营业总收入'])
+  const profitRaw = pickFinanceRow(rows, ['归母净利润', '净利润'])
+  const marginRaw = pickFinanceRow(rows, ['营业利润率', '销售净利率', '销售利润率'])
+  const revenueNums = revenueRaw.map(parseFinanceNumber)
+  const profitNums = profitRaw.map(parseFinanceNumber)
+  const marginNums = marginRaw.map(parseFinanceNumber)
+
+  const windowSize = 16
+  const isDescending = periods.length > 1 && periods[0] > periods[periods.length - 1]
+  const start = isDescending ? 0 : Math.max(periods.length - windowSize, 0)
+  const windowPeriods = periods.slice(start, start + windowSize)
+  const orderedPeriods = isDescending ? [...windowPeriods].reverse() : windowPeriods
+  const revenue = revenueRaw.slice(start).map(Number)
+  const profit = profitRaw.slice(start).map(Number)
+  const margin = marginRaw.slice(start).map(Number)
+
+  return {
+    periods: orderedPeriods,
+    series: {
+      revenue: buildLineSeries(
+        (isDescending ? [...revenueRaw.slice(start, start + windowSize)].reverse() : revenueRaw.slice(start, start + windowSize)),
+        (isDescending ? [...revenueNums.slice(start, start + windowSize)].reverse() : revenueNums.slice(start, start + windowSize)),
+        formatFinanceValue,
+        orderedPeriods
+      ),
+      profit: buildLineSeries(
+        (isDescending ? [...profitRaw.slice(start, start + windowSize)].reverse() : profitRaw.slice(start, start + windowSize)),
+        (isDescending ? [...profitNums.slice(start, start + windowSize)].reverse() : profitNums.slice(start, start + windowSize)),
+        formatFinanceValue,
+        orderedPeriods
+      ),
+      margin: buildLineSeries(
+        (isDescending ? [...marginRaw.slice(start, start + windowSize)].reverse() : marginRaw.slice(start, start + windowSize)),
+        (isDescending ? [...marginNums.slice(start, start + windowSize)].reverse() : marginNums.slice(start, start + windowSize)),
+        formatFinancePercent,
+        orderedPeriods
+      )
+    }
+  }
+})
+
 const handleFetch = async () => {
   error.value = ''
   result.value = null
+  financeData.value = null
+  visibleSeries.value = {
+    revenue: true,
+    profit: true,
+    margin: true
+  }
 
   if (!symbol.value.trim()) {
     error.value = '请输入股票代码'
@@ -337,7 +641,13 @@ const handleFetch = async () => {
 
   loading.value = true
   try {
-    const metrics = await getCompanyMetrics(symbol.value, market.value)
+    const [metrics, financeHtml] = await Promise.all([
+      getCompanyMetrics(symbol.value, market.value),
+      getFinancePage(symbol.value, market.value)
+    ])
+    if (financeHtml) {
+      financeData.value = parseFinanceHtml(financeHtml)
+    }
     if (metrics && (
       metrics.turnover ||
       metrics.volume ||
@@ -385,6 +695,35 @@ const handleFetch = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const toggleSeries = (key) => {
+  const current = visibleSeries.value
+  const active = Object.values(current).filter(Boolean)
+  if (active.length === 1 && current[key]) {
+    visibleSeries.value = { revenue: true, profit: true, margin: true }
+    return
+  }
+
+  visibleSeries.value = {
+    revenue: false,
+    profit: false,
+    margin: false,
+    [key]: true
+  }
+}
+
+const showTooltip = (point, label) => {
+  tooltip.value = {
+    visible: true,
+    x: Math.min(Math.max(point.x, 5), 95),
+    y: Math.min(Math.max(point.y, 5), 95),
+    text: `${point.label} ${label}: ${point.value}`
+  }
+}
+
+const hideTooltip = () => {
+  tooltip.value = { ...tooltip.value, visible: false }
 }
 
 const handleCopy = async () => {
@@ -813,6 +1152,180 @@ input:focus {
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.finance-panel {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.line-card {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.line-card.combo {
+  padding: 18px;
+  gap: 12px;
+}
+
+.line-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.line-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.line-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.badge:hover {
+  transform: translateY(-1px);
+}
+
+.badge.inactive {
+  opacity: 0.45;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.badge.revenue {
+  color: #c2410c;
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.badge.profit {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.badge.margin {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.line-card svg {
+  width: 100%;
+  height: 180px;
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart-bg {
+  fill: rgba(15, 23, 42, 0.02);
+}
+
+.chart-grid line {
+  stroke: rgba(15, 23, 42, 0.06);
+  stroke-width: 0.6;
+  stroke-dasharray: 2 2;
+}
+
+.chart-axis {
+  stroke: rgba(15, 23, 42, 0.12);
+  stroke-width: 0.8;
+}
+
+.line {
+  fill: none;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.line.revenue {
+  stroke: #f97316;
+}
+
+.line.profit {
+  stroke: #1d4ed8;
+}
+
+.line.margin {
+  stroke: #059669;
+}
+
+.dot {
+  fill: #ffffff;
+  stroke-width: 1.1;
+}
+
+.dot.revenue {
+  stroke: #f97316;
+}
+
+.dot.profit {
+  stroke: #1d4ed8;
+}
+
+.dot.margin {
+  stroke: #059669;
+}
+
+.line-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, -120%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+}
+
+.chart-note {
+  font-size: 11px;
+  color: #71717a;
 }
 
 .empty-state {
