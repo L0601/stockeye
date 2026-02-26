@@ -54,13 +54,18 @@ export default async function handler(req, res) {
   const hasTrailingSlash = urlPath.endsWith('/')
   const restPath = segments.slice(1).join('/') + (hasTrailingSlash ? '/' : '')
   const targetUrl = `${config.target}/${restPath}${queryString ? `?${queryString}` : ''}`
-  const headers = { 'User-Agent': UA, 'Referer': config.referer }
+  const headers = { 'User-Agent': UA, 'Referer': config.referer, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
 
   try {
     const response = config.followRedirects
       ? await fetchWithRedirects(targetUrl, headers)
       : await doRequest(targetUrl, headers)
 
+    if (response.status === 304) {
+      res.statusCode = 200
+      res.setHeader('Cache-Control', 'no-store')
+      return res.end('')
+    }
     res.statusCode = response.status
     for (const [key, value] of Object.entries(response.headers)) {
       if (!SKIP_HEADERS.has(key.toLowerCase())) res.setHeader(key, value)
