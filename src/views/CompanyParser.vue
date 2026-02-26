@@ -10,6 +10,7 @@
         </button>
         <div class="title-group">
           <h1>公司指标解析</h1>
+          <div class="delay-note">提醒：页面数据约有 30 分钟延迟</div>
         </div>
         <div class="header-spacer"></div>
       </div>
@@ -911,6 +912,12 @@ input:focus {
   margin-top: 14px;
   font-size: 12px;
   color: #71717a;
+}
+
+.delay-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #dc2626;
 }
 
 .mono {
