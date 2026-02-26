@@ -1,5 +1,4 @@
-import https from 'node:https'
-import http from 'node:http'
+export const config = { runtime: 'edge' }
 
 const PROXY_MAP = {
   sina:             { target: 'https://hq.sinajs.cn',            referer: 'https://finance.sina.com.cn/' },
@@ -14,66 +13,45 @@ const PROXY_MAP = {
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
 const SKIP_HEADERS = new Set(['transfer-encoding', 'connection', 'etag', 'last-modified', 'expires', 'cache-control'])
 
-function doRequest(url, headers) {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url)
-    const client = parsed.protocol === 'https:' ? https : http
-    const req = client.request(
-      { hostname: parsed.hostname, path: parsed.pathname + parsed.search, method: 'GET', headers },
-      (res) => {
-        const chunks = []
-        res.on('data', chunk => chunks.push(chunk))
-        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
-}
-
 async function fetchWithRedirects(url, headers, depth = 0) {
   if (depth >= 5) throw new Error('Too many redirects')
-  const res = await doRequest(url, headers)
-  if (res.status >= 300 && res.status < 400 && res.headers.location) {
-    return fetchWithRedirects(new URL(res.headers.location, url).toString(), headers, depth + 1)
+  const res = await fetch(url, { headers, redirect: 'manual' })
+  if (res.status >= 300 && res.status < 400) {
+    const location = res.headers.get('location')
+    if (location) return fetchWithRedirects(new URL(location, url).toString(), headers, depth + 1)
   }
   return res
 }
 
-export default async function handler(req, res) {
-  const [urlPath, queryString] = (req.url || '').split('?')
-  const segments = urlPath.replace(/^\/api\//, '').split('/').filter(Boolean)
+export default async function handler(req) {
+  const { pathname, search } = new URL(req.url)
+  const segments = pathname.replace(/^\/api\//, '').split('/').filter(Boolean)
   const service = segments[0]
-  const config = PROXY_MAP[service]
+  const proxyConfig = PROXY_MAP[service]
 
-  if (!config) {
-    res.statusCode = 404
-    return res.end('Unknown service')
-  }
+  if (!proxyConfig) return new Response('Unknown service', { status: 404 })
 
-  const hasTrailingSlash = urlPath.endsWith('/')
-  const restPath = segments.slice(1).join('/') + (hasTrailingSlash ? '/' : '')
-  const targetUrl = `${config.target}/${restPath}${queryString ? `?${queryString}` : ''}`
-  const headers = { 'User-Agent': UA, 'Referer': config.referer, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+  const restPath = segments.slice(1).join('/') + (pathname.endsWith('/') ? '/' : '')
+  const targetUrl = `${proxyConfig.target}/${restPath}${search}`
+  const headers = { 'User-Agent': UA, 'Referer': proxyConfig.referer, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
 
   try {
-    const response = config.followRedirects
+    const response = proxyConfig.followRedirects
       ? await fetchWithRedirects(targetUrl, headers)
-      : await doRequest(targetUrl, headers)
+      : await fetch(targetUrl, { headers })
 
     if (response.status === 304) {
-      res.statusCode = 200
-      res.setHeader('Cache-Control', 'no-store')
-      return res.end('')
+      return new Response('', { status: 200, headers: { 'Cache-Control': 'no-store' } })
     }
-    res.statusCode = response.status
-    for (const [key, value] of Object.entries(response.headers)) {
-      if (!SKIP_HEADERS.has(key.toLowerCase())) res.setHeader(key, value)
+
+    const resHeaders = new Headers()
+    for (const [key, value] of response.headers.entries()) {
+      if (!SKIP_HEADERS.has(key.toLowerCase())) resHeaders.set(key, value)
     }
-    res.setHeader('Cache-Control', 'no-store')
-    res.end(response.body)
+    resHeaders.set('Cache-Control', 'no-store')
+
+    return new Response(response.body, { status: response.status, headers: resHeaders })
   } catch (err) {
-    res.statusCode = 502
-    res.end(`Proxy error: ${err.message}`)
+    return new Response(`Proxy error: ${err.message}`, { status: 502 })
   }
 }
