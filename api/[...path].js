@@ -12,7 +12,7 @@ const PROXY_MAP = {
 }
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-const SKIP_HEADERS = new Set(['transfer-encoding', 'connection'])
+const SKIP_HEADERS = new Set(['transfer-encoding', 'connection', 'etag', 'last-modified', 'expires', 'cache-control'])
 
 function doRequest(url, headers) {
   return new Promise((resolve, reject) => {
@@ -65,6 +65,7 @@ export default async function handler(req, res) {
     for (const [key, value] of Object.entries(response.headers)) {
       if (!SKIP_HEADERS.has(key.toLowerCase())) res.setHeader(key, value)
     }
+    res.setHeader('Cache-Control', 'no-store')
     res.end(response.body)
   } catch (err) {
     res.statusCode = 502
