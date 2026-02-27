@@ -398,16 +398,36 @@ const summaryCopyText = computed(() => {
   return lines.join('\n')
 })
 
+const filteredFinanceData = computed(() => {
+  if (!financeData.value) return null
+  const { periods, rows } = financeData.value
+  if (!periods || periods.length === 0) return financeData.value
+
+  const latestYear = Math.max(...periods.map(p => parseInt(p.substring(0, 4))))
+  const indices = periods.reduce((acc, period, i) => {
+    const year = parseInt(period.substring(0, 4))
+    if (year === latestYear || period.endsWith('12-31')) acc.push(i)
+    return acc
+  }, [])
+
+  return {
+    periods: indices.map(i => periods[i]),
+    rows: Object.fromEntries(
+      Object.entries(rows).map(([key, values]) => [key, indices.map(i => values[i])])
+    )
+  }
+})
+
 const financeCopyText = computed(() => {
-  if (!financeData.value || financeData.value.periods.length === 0) return ''
-  const rows = financeData.value.rows
+  if (!filteredFinanceData.value || filteredFinanceData.value.periods.length === 0) return ''
+  const rows = filteredFinanceData.value.rows
   const revenue = pickFinanceRow(rows, ['营业收入', '营业总收入'])
   const profit = pickFinanceRow(rows, ['归母净利润', '净利润'])
   const gross = pickFinanceRow(rows, ['毛利', '营业毛利'])
   const margin = pickFinanceRow(rows, ['营业利润率', '销售净利率', '销售利润率'])
   const lines = ['财务数据:']
 
-  financeData.value.periods.forEach((period, index) => {
+  filteredFinanceData.value.periods.forEach((period, index) => {
     const type = period.endsWith('12-31') ? '年度' : '季度'
     const revenueValue = formatFinanceValue(revenue[index])
     const profitValue = formatFinanceValue(profit[index])
@@ -579,12 +599,12 @@ const buildLineSeries = (rawValues, numericValues, formatter, labels) => {
 }
 
 const financeChart = computed(() => {
-  if (!financeData.value) return null
+  if (!filteredFinanceData.value) return null
 
-  const periods = financeData.value.periods
+  const periods = filteredFinanceData.value.periods
   if (!periods || periods.length === 0) return null
 
-  const rows = financeData.value.rows
+  const rows = filteredFinanceData.value.rows
   const revenueRaw = pickFinanceRow(rows, ['营业收入', '营业总收入'])
   const profitRaw = pickFinanceRow(rows, ['归母净利润', '净利润'])
   const marginRaw = pickFinanceRow(rows, ['营业利润率', '销售净利率', '销售利润率'])
@@ -597,10 +617,6 @@ const financeChart = computed(() => {
   const start = isDescending ? 0 : Math.max(periods.length - windowSize, 0)
   const windowPeriods = periods.slice(start, start + windowSize)
   const orderedPeriods = isDescending ? [...windowPeriods].reverse() : windowPeriods
-  const revenue = revenueRaw.slice(start).map(Number)
-  const profit = profitRaw.slice(start).map(Number)
-  const margin = marginRaw.slice(start).map(Number)
-
   return {
     periods: orderedPeriods,
     series: {
