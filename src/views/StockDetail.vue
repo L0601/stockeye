@@ -27,7 +27,6 @@
       </n-layout-header>
 
       <n-layout-content class="detail-content">
-        <n-spin :show="loading">
           <n-space vertical size="large">
             <!-- 基本信息 -->
             <n-card title="实时行情" class="info-card">
@@ -108,24 +107,10 @@
 
             <!-- K线图 - A股/港股支持 -->
             <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK'" title="K线图" class="chart-card">
-              <div v-if="klineData.length > 0" class="chart-container">
+              <div v-if="klineData.length > 0">
                 <stock-chart :data="klineData" />
               </div>
-              <n-empty
-                v-else
-                description="暂无K线数据"
-                size="large"
-              />
-            </n-card>
-
-            <!-- 美股不支持提示 -->
-            <n-card v-else-if="stockInfo.market === 'US'" title="K线图" class="chart-card">
-              <n-alert type="warning" class="warning-alert">
-                <template #icon>
-                  <span style="font-size: 20px;">⚠️</span>
-                </template>
-                美股暂不支持K线数据查看
-              </n-alert>
+              <n-empty v-else description="暂无K线数据" />
             </n-card>
 
             <!-- 技术指标 - A股/港股支持 -->
@@ -158,17 +143,7 @@
               </n-grid>
             </n-card>
 
-            <!-- 美股不支持提示 -->
-            <n-card v-else-if="stockInfo.market === 'US'" title="技术指标" class="indicator-card">
-              <n-alert type="warning" class="warning-alert">
-                <template #icon>
-                  <span style="font-size: 20px;">⚠️</span>
-                </template>
-                美股暂不支持技术指标查看
-              </n-alert>
-            </n-card>
           </n-space>
-        </n-spin>
       </n-layout-content>
     </n-layout>
   </div>
@@ -217,27 +192,25 @@ onMounted(() => {
 const loadData = async () => {
   loading.value = true
   try {
-    // 从本地存储获取股票信息
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
-
-    if (stock) {
-      // 获取实时数据
-      const quote = await getStockQuote(stock.symbol, stock.market)
-      if (quote) {
-        stockInfo.value = { ...stock, ...quote }
-      }
-
-      // 获取K线数据
-      const kline = await getStockKLine(stock.symbol, stock.market)
-      if (kline && kline.length > 0) {
-        klineData.value = kline
-      }
-    }
-  } catch (error) {
-    console.error('加载数据失败:', error)
+    if (!stock) return
+    stockInfo.value = { ...stock }
+    const quote = await getStockQuote(stock.symbol, stock.market)
+    if (quote) stockInfo.value = { ...stock, ...quote }
+  } catch (e) {
+    console.error('加载行情失败:', e)
   } finally {
     loading.value = false
+  }
+  try {
+    const stocks = storage.getStocks()
+    const stock = stocks.find(s => s.symbol === symbol.value)
+    if (!stock) return
+    const kline = await getStockKLine(stock.symbol, stock.market)
+    if (kline?.length) klineData.value = kline
+  } catch (e) {
+    console.error('加载K线失败:', e)
   }
 }
 
@@ -288,10 +261,6 @@ const formatAmount = (amount) => {
   return amount.toFixed(2)
 }
 
-const getChangeType = (change) => {
-  if (!change) return 'default'
-  return change >= 0 ? 'error' : 'success'
-}
 
 const getMarketName = (market) => {
   const names = {

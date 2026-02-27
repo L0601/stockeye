@@ -4,77 +4,107 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts'
+import * as echarts from 'echarts/dist/echarts.esm.mjs'
 
 const props = defineProps({
   data: { type: Array, default: () => [] }
 })
 
 const chartRef = ref(null)
-let chart = null
-let candleSeries = null
-let ma5Series = null
-let ma10Series = null
-let ma20Series = null
-let resizeObserver = null
-
-const calcMA = (sorted, n) =>
-  sorted.flatMap((item, i) => {
-    if (i < n - 1) return []
-    const sum = sorted.slice(i - n + 1, i + 1).reduce((acc, d) => acc + d.close, 0)
-    return [{ time: item.date, value: +(sum / n).toFixed(3) }]
-  })
+let chartInstance = null
 
 const initChart = () => {
   if (!chartRef.value) return
-
-  chart = createChart(chartRef.value, {
-    layout: {
-      background: { type: ColorType.Solid, color: 'transparent' },
-      textColor: '#64748b'
-    },
-    grid: {
-      vertLines: { color: 'rgba(0,0,0,0.04)' },
-      horzLines: { color: 'rgba(0,0,0,0.04)' }
-    },
-    rightPriceScale: { borderColor: 'rgba(0,0,0,0.1)' },
-    timeScale: { borderColor: 'rgba(0,0,0,0.1)', timeVisible: false },
-    width: chartRef.value.clientWidth,
-    height: 400
-  })
-
-  candleSeries = chart.addSeries(CandlestickSeries, {
-    upColor: '#ef4444', downColor: '#22c55e',
-    borderUpColor: '#ef4444', borderDownColor: '#22c55e',
-    wickUpColor: '#ef4444', wickDownColor: '#22c55e'
-  })
-  ma5Series = chart.addSeries(LineSeries, { color: '#667eea', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-  ma10Series = chart.addSeries(LineSeries, { color: '#764ba2', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-  ma20Series = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-
-  resizeObserver = new ResizeObserver(() => {
-    if (chart && chartRef.value) chart.applyOptions({ width: chartRef.value.clientWidth })
-  })
-  resizeObserver.observe(chartRef.value)
-
+  if (chartRef.value.clientWidth === 0) {
+    setTimeout(initChart, 50)
+    return
+  }
+  chartInstance = echarts.init(chartRef.value)
   updateChart()
 }
 
 const updateChart = () => {
-  if (!chart || !props.data.length) return
+  if (!chartInstance || !props.data.length) return
 
-  const sorted = [...props.data].sort((a, b) => a.date < b.date ? -1 : 1)
-  candleSeries.setData(sorted.map(d => ({ time: d.date, open: d.open, high: d.high, low: d.low, close: d.close })))
-  ma5Series.setData(calcMA(sorted, 5))
-  ma10Series.setData(calcMA(sorted, 10))
-  ma20Series.setData(calcMA(sorted, 20))
-  chart.timeScale().fitContent()
+  const dates = props.data.map(d => d.date)
+  const values = props.data.map(d => [d.open, d.close, d.low, d.high])
+
+  chartInstance.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#667eea',
+      borderWidth: 1,
+      textStyle: { color: '#333' },
+      extraCssText: 'box-shadow:0 4px 12px rgba(0,0,0,0.1);border-radius:8px;'
+    },
+    grid: { left: '10%', right: '10%', bottom: '15%', top: '10%' },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      scale: true,
+      boundaryGap: true,
+      axisLine: { onZero: false, lineStyle: { color: '#667eea', width: 1 } },
+      axisLabel: { color: '#666', fontSize: 12 },
+      splitLine: { show: false },
+      min: 'dataMin',
+      max: 'dataMax'
+    },
+    yAxis: {
+      scale: true,
+      axisLine: { lineStyle: { color: '#667eea', width: 1 } },
+      axisLabel: { color: '#666', fontSize: 12 },
+      splitLine: { lineStyle: { color: 'rgba(102,126,234,0.1)', type: 'dashed' } },
+      splitArea: { show: true, areaStyle: { color: ['rgba(255,255,255,0.02)', 'rgba(102,126,234,0.02)'] } }
+    },
+    dataZoom: [
+      { type: 'inside', start: 50, end: 100 },
+      { show: true, type: 'slider', top: '90%', start: 50, end: 100 }
+    ],
+    series: [
+      {
+        name: 'K线',
+        type: 'candlestick',
+        data: values,
+        itemStyle: {
+          color: '#ef4444', color0: '#22c55e',
+          borderColor: '#ef4444', borderColor0: '#22c55e'
+        }
+      },
+      {
+        name: 'MA5', type: 'line',
+        data: calcMA(5),
+        smooth: true,
+        lineStyle: { color: '#667eea', opacity: 0.8, width: 2 },
+        symbol: 'none'
+      },
+      {
+        name: 'MA10', type: 'line',
+        data: calcMA(10),
+        smooth: true,
+        lineStyle: { color: '#764ba2', opacity: 0.8, width: 2 },
+        symbol: 'none'
+      },
+      {
+        name: 'MA20', type: 'line',
+        data: calcMA(20),
+        smooth: true,
+        lineStyle: { color: '#f59e0b', opacity: 0.8, width: 2 },
+        symbol: 'none'
+      }
+    ]
+  })
 }
 
-onMounted(initChart)
-onUnmounted(() => {
-  resizeObserver?.disconnect()
-  chart?.remove()
-})
+const calcMA = (n) =>
+  props.data.map((_, i) => {
+    if (i < n - 1) return '-'
+    const sum = props.data.slice(i - n + 1, i + 1).reduce((acc, d) => acc + d.close, 0)
+    return (sum / n).toFixed(2)
+  })
+
+onMounted(() => setTimeout(initChart, 50))
+onUnmounted(() => chartInstance?.dispose())
 watch(() => props.data, updateChart, { deep: true })
 </script>
