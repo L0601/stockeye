@@ -4,7 +4,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { createChart, ColorType } from 'lightweight-charts'
+import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts'
 
 const props = defineProps({
   data: { type: Array, default: () => [] }
@@ -43,14 +43,14 @@ const initChart = () => {
     height: 400
   })
 
-  candleSeries = chart.addCandlestickSeries({
+  candleSeries = chart.addSeries(CandlestickSeries, {
     upColor: '#ef4444', downColor: '#22c55e',
     borderUpColor: '#ef4444', borderDownColor: '#22c55e',
     wickUpColor: '#ef4444', wickDownColor: '#22c55e'
   })
-  ma5Series = chart.addLineSeries({ color: '#667eea', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-  ma10Series = chart.addLineSeries({ color: '#764ba2', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
-  ma20Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
+  ma5Series = chart.addSeries(LineSeries, { color: '#667eea', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
+  ma10Series = chart.addSeries(LineSeries, { color: '#764ba2', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
+  ma20Series = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
 
   resizeObserver = new ResizeObserver(() => {
     if (chart && chartRef.value) chart.applyOptions({ width: chartRef.value.clientWidth })

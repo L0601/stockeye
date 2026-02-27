@@ -4,7 +4,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { createChart, ColorType } from 'lightweight-charts'
+import { createChart, ColorType, LineSeries } from 'lightweight-charts'
 
 const props = defineProps({
   periods: { type: Array, default: () => [] },
@@ -69,15 +69,15 @@ const init = () => {
     height: 220
   })
 
-  revSeries = chart.addLineSeries({
+  revSeries = chart.addSeries(LineSeries, {
     color: '#f97316', lineWidth: 2,
     priceScaleId: 'left', lastValueVisible: false, priceLineVisible: false
   })
-  profitSeries = chart.addLineSeries({
+  profitSeries = chart.addSeries(LineSeries, {
     color: '#1d4ed8', lineWidth: 2,
     priceScaleId: 'left', lastValueVisible: false, priceLineVisible: false
   })
-  marginSeries = chart.addLineSeries({
+  marginSeries = chart.addSeries(LineSeries, {
     color: '#059669', lineWidth: 2,
     priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false
   })
