@@ -642,6 +642,12 @@ const getProjectedData = (data) => {
 
   const projectedRows = Object.fromEntries(
     Object.entries(rows).map(([key, vals]) => {
+      // 比率类指标（含"率"）取各季均值，绝对值类指标用累计值+季均值
+      if (key.includes('率')) {
+        const nums = latestYearIdxs.map(i => parseFinanceNumber(vals[i])).filter(Number.isFinite)
+        const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
+        return [key, [avg ?? vals[latestIdx]]]
+      }
       const cum = parseFinanceNumber(vals[latestIdx])
       return [key, [Number.isFinite(cum) ? cum + cum / numQuarters : vals[latestIdx]]]
     })
