@@ -310,7 +310,8 @@ async function getHKStockKLine(symbol) {
   const code = 'hk' + num.padStart(5, '0')
   const url = `/api/qq/appstock/app/fqkline/get?param=${code},day,,,320,qfq`
   const response = await request.get(url)
-  const klineData = response.data?.data?.[code]?.qfqday || []
+  const stockData = response.data?.data?.[code]
+  const klineData = stockData?.qfqday || stockData?.day || []
   return klineData.map(item => ({
     date: item[0],
     open: parseFloat(item[1]),

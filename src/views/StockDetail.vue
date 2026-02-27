@@ -106,8 +106,8 @@
               </n-space>
             </n-card>
 
-            <!-- K线图 - 仅A股支持 -->
-            <n-card v-if="stockInfo.market === 'CN'" title="K线图" class="chart-card">
+            <!-- K线图 - A股/港股支持 -->
+            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK'" title="K线图" class="chart-card">
               <div v-if="klineData.length > 0" class="chart-container">
                 <stock-chart :data="klineData" />
               </div>
@@ -118,18 +118,18 @@
               />
             </n-card>
 
-            <!-- 港股/美股不支持提示 -->
-            <n-card v-else title="K线图" class="chart-card">
+            <!-- 美股不支持提示 -->
+            <n-card v-else-if="stockInfo.market === 'US'" title="K线图" class="chart-card">
               <n-alert type="warning" class="warning-alert">
                 <template #icon>
                   <span style="font-size: 20px;">⚠️</span>
                 </template>
-                {{ getMarketName(stockInfo.market) }}暂不支持K线数据查看，仅支持A股K线图
+                美股暂不支持K线数据查看
               </n-alert>
             </n-card>
 
-            <!-- 技术指标 - 仅A股支持 -->
-            <n-card v-if="stockInfo.market === 'CN'" title="技术指标" class="indicator-card">
+            <!-- 技术指标 - A股/港股支持 -->
+            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK'" title="技术指标" class="indicator-card">
               <n-grid :cols="3" :x-gap="24" :y-gap="20">
                 <n-grid-item>
                   <div class="indicator-item">
@@ -158,13 +158,13 @@
               </n-grid>
             </n-card>
 
-            <!-- 港股/美股不支持提示 -->
-            <n-card v-else title="技术指标" class="indicator-card">
+            <!-- 美股不支持提示 -->
+            <n-card v-else-if="stockInfo.market === 'US'" title="技术指标" class="indicator-card">
               <n-alert type="warning" class="warning-alert">
                 <template #icon>
                   <span style="font-size: 20px;">⚠️</span>
                 </template>
-                {{ getMarketName(stockInfo.market) }}暂不支持技术指标查看，仅支持A股
+                美股暂不支持技术指标查看
               </n-alert>
             </n-card>
           </n-space>

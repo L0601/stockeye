@@ -9,7 +9,7 @@
           <span>返回</span>
         </button>
         <div class="title-group">
-          <h1>公司指标解析</h1>
+          <h1>{{ result && result.name ? result.name + ' 指标解析' : '公司指标解析' }}</h1>
           <div class="delay-note">提醒：页面数据约有 30 分钟延迟</div>
         </div>
         <div class="header-spacer"></div>
@@ -380,7 +380,7 @@ const parseFinanceNumber = (value) => {
 }
 
 const isAnnualPeriod = (period) =>
-  period.includes('年度') || period.includes('年报') || isAnnualPeriod(period)
+  period.includes('年度') || period.includes('年报') || period.endsWith('12-31')
 
 const pickFinanceRow = (rows, names) => {
   for (const name of names) {
@@ -494,6 +494,7 @@ const formatPercent = (value, digits = 2) => {
 }
 
 const normalizeMetrics = (metrics) => ({
+  name: metrics.name || '',
   industry: metrics.industry || '',
   current: formatPrice(metrics.current),
   open: formatPrice(metrics.open),
