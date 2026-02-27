@@ -44,11 +44,6 @@
       <section class="panel result-panel">
         <div class="panel-header">
           <h2>解析结果</h2>
-          <div class="panel-actions">
-            <button class="action-btn ghost" :disabled="!displayText" @click="handleCopy">
-              一键复制
-            </button>
-          </div>
         </div>
 
         <div v-if="result" class="result-sections">
@@ -271,7 +266,10 @@
         </div>
 
         <div v-if="displayText" class="copy-block">
-          <div class="copy-label">可复制内容</div>
+          <div class="copy-header">
+            <div class="copy-label">可复制内容</div>
+            <button class="action-btn ghost" @click="handleCopy">一键复制</button>
+          </div>
           <pre class="copy-text">{{ displayText }}</pre>
         </div>
       </section>
@@ -1188,6 +1186,12 @@ input:focus {
   padding-top: 16px;
   display: grid;
   gap: 10px;
+}
+
+.copy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .copy-label {
