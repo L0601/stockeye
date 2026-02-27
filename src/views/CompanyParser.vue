@@ -614,13 +614,64 @@ const buildLineSeries = (rawValues, numericValues, formatter, labels) => {
   }
 }
 
+// 如果最新年度只有季度数据，将其替换为预估全年数据
+const getProjectedData = (data) => {
+  if (!data) return null
+  const { periods, rows } = data
+  if (!periods || periods.length === 0) return data
+
+  const isDescending = periods.length > 1 && periods[0] > periods[periods.length - 1]
+  const latestPeriod = isDescending ? periods[0] : periods[periods.length - 1]
+  if (isAnnualPeriod(latestPeriod)) return data
+
+  const latestYear = latestPeriod.substring(0, 4)
+  const numQuarters = latestPeriod.endsWith('03-31') ? 1 : latestPeriod.endsWith('06-30') ? 2 : 3
+  const projectedLabel = `${latestYear}(预)`
+
+  const latestYearIdxs = periods.reduce((acc, p, i) => {
+    if (p.startsWith(latestYear) && !isAnnualPeriod(p)) acc.push(i)
+    return acc
+  }, [])
+  const otherIdxs = periods.reduce((acc, p, i) => {
+    if (!p.startsWith(latestYear) || isAnnualPeriod(p)) acc.push(i)
+    return acc
+  }, [])
+
+  // 取最新季度的累计值（降序时取第一个，升序时取最后一个）
+  const latestIdx = isDescending ? latestYearIdxs[0] : latestYearIdxs[latestYearIdxs.length - 1]
+
+  const projectedRows = Object.fromEntries(
+    Object.entries(rows).map(([key, vals]) => {
+      const cum = parseFinanceNumber(vals[latestIdx])
+      return [key, [Number.isFinite(cum) ? cum / numQuarters * 4 : vals[latestIdx]]]
+    })
+  )
+  const otherPeriods = otherIdxs.map(i => periods[i])
+  const otherRows = Object.fromEntries(
+    Object.entries(rows).map(([key, vals]) => [key, otherIdxs.map(i => vals[i])])
+  )
+
+  return isDescending
+    ? {
+        periods: [projectedLabel, ...otherPeriods],
+        rows: Object.fromEntries(Object.keys(rows).map(k => [k, [...projectedRows[k], ...otherRows[k]]]))
+      }
+    : {
+        periods: [...otherPeriods, projectedLabel],
+        rows: Object.fromEntries(Object.keys(rows).map(k => [k, [...otherRows[k], ...projectedRows[k]]]))
+      }
+}
+
 const financeChart = computed(() => {
   if (!filteredFinanceData.value) return null
 
-  const periods = filteredFinanceData.value.periods
+  const projected = getProjectedData(filteredFinanceData.value)
+  if (!projected) return null
+
+  const periods = projected.periods
   if (!periods || periods.length === 0) return null
 
-  const rows = filteredFinanceData.value.rows
+  const rows = projected.rows
   const revenueRaw = pickFinanceRow(rows, ['营业收入', '营业总收入'])
   const profitRaw = pickFinanceRow(rows, ['归母净利润', '净利润'])
   const marginRaw = pickFinanceRow(rows, ['营业利润率', '销售净利率', '销售利润率'])
