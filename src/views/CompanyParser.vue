@@ -187,80 +187,13 @@
                 </button>
               </div>
             </div>
-            <div class="chart-wrap">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" @click="hideTooltip">
-              <rect x="0" y="0" width="100" height="100" class="chart-bg" />
-              <g class="chart-grid">
-                <line x1="0" y1="20" x2="100" y2="20" />
-                <line x1="0" y1="40" x2="100" y2="40" />
-                <line x1="0" y1="60" x2="100" y2="60" />
-                <line x1="0" y1="80" x2="100" y2="80" />
-              </g>
-              <line x1="0" y1="100" x2="100" y2="100" class="chart-axis" />
-              <polyline
-                v-if="visibleSeries.revenue"
-                :points="financeChart.series.revenue.polyline"
-                class="line revenue"
-              />
-              <polyline
-                v-if="visibleSeries.profit"
-                :points="financeChart.series.profit.polyline"
-                class="line profit"
-              />
-              <polyline
-                v-if="visibleSeries.margin"
-                :points="financeChart.series.margin.polyline"
-                class="line margin"
-              />
-              <circle
-                v-for="(point, index) in financeChart.series.revenue.points"
-                v-if="visibleSeries.revenue"
-                :key="`rev-${index}`"
-                :cx="point.x"
-                :cy="point.y"
-                r="2.2"
-                class="dot revenue"
-                @click.stop="showTooltip(point, '营收')"
-              >
-                <title>{{ point.label }} | 营收 {{ point.value }}</title>
-              </circle>
-              <circle
-                v-for="(point, index) in financeChart.series.profit.points"
-                v-if="visibleSeries.profit"
-                :key="`profit-${index}`"
-                :cx="point.x"
-                :cy="point.y"
-                r="2.2"
-                class="dot profit"
-                @click.stop="showTooltip(point, '归母净利润')"
-              >
-                <title>{{ point.label }} | 归母净利润 {{ point.value }}</title>
-              </circle>
-              <circle
-                v-for="(point, index) in financeChart.series.margin.points"
-                v-if="visibleSeries.margin"
-                :key="`margin-${index}`"
-                :cx="point.x"
-                :cy="point.y"
-                r="2.2"
-                class="dot margin"
-                @click.stop="showTooltip(point, '营业利润率')"
-              >
-                <title>{{ point.label }} | 营业利润率 {{ point.value }}</title>
-              </circle>
-              </svg>
-              <div
-                v-if="tooltip.visible"
-                class="chart-tooltip"
-                :style="{ left: `${tooltip.x}%`, top: `${tooltip.y}%` }"
-              >
-                {{ tooltip.text }}
-              </div>
-            </div>
-            <div class="line-axis">
-              <span>{{ financeChart.periods[0] }}</span>
-              <span>{{ financeChart.periods[financeChart.periods.length - 1] }}</span>
-            </div>
+            <FinanceChart
+              :periods="financeChart.periods"
+              :revenue="financeChart.series.revenue.nums"
+              :profit="financeChart.series.profit.nums"
+              :margin="financeChart.series.margin.nums"
+              :visible="visibleSeries"
+            />
           </div>
           <div class="chart-note">注：三条线分别按自身区间归一化，展示趋势变化。</div>
         </div>
@@ -282,6 +215,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, MARKET_TYPE } from '@/api/stock'
+import FinanceChart from '@/components/FinanceChart.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -297,12 +231,6 @@ const visibleSeries = ref({
   revenue: true,
   profit: true,
   margin: true
-})
-const tooltip = ref({
-  visible: false,
-  x: 0,
-  y: 0,
-  text: ''
 })
 
 const detectMarket = (value) => {
@@ -614,7 +542,8 @@ const buildLineSeries = (rawValues, numericValues, formatter, labels) => {
   return {
     points,
     polyline: points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' '),
-    latest: formatter(rawValues[len - 1])
+    latest: formatter(rawValues[len - 1]),
+    nums
   }
 }
 
@@ -819,18 +748,6 @@ const toggleSeries = (key) => {
   }
 }
 
-const showTooltip = (point, label) => {
-  tooltip.value = {
-    visible: true,
-    x: Math.min(Math.max(point.x, 5), 95),
-    y: Math.min(Math.max(point.y, 5), 95),
-    text: `${point.label} ${label}: ${point.value}`
-  }
-}
-
-const hideTooltip = () => {
-  tooltip.value = { ...tooltip.value, visible: false }
-}
 
 const handleCopy = async () => {
   if (!displayText.value) return
@@ -1359,83 +1276,6 @@ input:focus {
   background: rgba(16, 185, 129, 0.12);
 }
 
-.line-card svg {
-  width: 100%;
-  height: 180px;
-}
-
-.chart-wrap {
-  position: relative;
-}
-
-.chart-bg {
-  fill: rgba(15, 23, 42, 0.02);
-}
-
-.chart-grid line {
-  stroke: rgba(15, 23, 42, 0.06);
-  stroke-width: 0.6;
-  stroke-dasharray: 2 2;
-}
-
-.chart-axis {
-  stroke: rgba(15, 23, 42, 0.12);
-  stroke-width: 0.8;
-}
-
-.line {
-  fill: none;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.line.revenue {
-  stroke: #f97316;
-}
-
-.line.profit {
-  stroke: #1d4ed8;
-}
-
-.line.margin {
-  stroke: #059669;
-}
-
-.dot {
-  stroke: none;
-  opacity: 0;
-  transition: opacity 0.15s, r 0.15s;
-}
-
-.dot:hover {
-  opacity: 1;
-}
-
-.dot.revenue { fill: #f97316; }
-.dot.profit  { fill: #1d4ed8; }
-.dot.margin  { fill: #059669; }
-
-.line-axis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.chart-tooltip {
-  position: absolute;
-  transform: translate(-50%, -120%);
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.9);
-  color: #f8fafc;
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
-}
 
 .chart-note {
   font-size: 11px;
