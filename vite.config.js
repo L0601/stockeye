@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath, URL } from 'node:url'
-import http from 'node:http'
-import https from 'node:https'
+import { fileURLToPath, URL } from 'url'
+import http from 'http'
+import https from 'https'
 
 const fetchWithRedirects = (url, headers, depth = 0) => new Promise((resolve, reject) => {
   const client = url.startsWith('https') ? https : http
