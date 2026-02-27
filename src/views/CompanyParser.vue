@@ -643,7 +643,7 @@ const getProjectedData = (data) => {
   const projectedRows = Object.fromEntries(
     Object.entries(rows).map(([key, vals]) => {
       const cum = parseFinanceNumber(vals[latestIdx])
-      return [key, [Number.isFinite(cum) ? cum / numQuarters * 4 : vals[latestIdx]]]
+      return [key, [Number.isFinite(cum) ? cum + cum / numQuarters : vals[latestIdx]]]
     })
   )
   const otherPeriods = otherIdxs.map(i => periods[i])
