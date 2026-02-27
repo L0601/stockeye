@@ -218,7 +218,7 @@
                 :key="`rev-${index}`"
                 :cx="point.x"
                 :cy="point.y"
-                r="1.6"
+                r="2.2"
                 class="dot revenue"
                 @click.stop="showTooltip(point, '营收')"
               >
@@ -230,7 +230,7 @@
                 :key="`profit-${index}`"
                 :cx="point.x"
                 :cy="point.y"
-                r="1.6"
+                r="2.2"
                 class="dot profit"
                 @click.stop="showTooltip(point, '归母净利润')"
               >
@@ -242,7 +242,7 @@
                 :key="`margin-${index}`"
                 :cx="point.x"
                 :cy="point.y"
-                r="1.6"
+                r="2.2"
                 class="dot margin"
                 @click.stop="showTooltip(point, '营业利润率')"
               >
@@ -596,9 +596,13 @@ const buildLineSeries = (rawValues, numericValues, formatter, labels) => {
   const range = max - min || 1
   const len = rawValues.length || 1
 
+  const paddingTop = 12
+  const paddingBottom = 6
+  const usable = 100 - paddingTop - paddingBottom
+
   const points = nums.map((num, index) => {
     const x = len === 1 ? 50 : (index / (len - 1)) * 100
-    const y = Number.isFinite(num) ? 100 - ((num - min) / range) * 100 : 100
+    const y = Number.isFinite(num) ? paddingTop + (1 - (num - min) / range) * usable : 100 - paddingBottom
     return {
       x,
       y,
@@ -1381,10 +1385,9 @@ input:focus {
 
 .line {
   fill: none;
-  stroke-width: 1.1;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.9;
 }
 
 .line.revenue {
@@ -1400,21 +1403,18 @@ input:focus {
 }
 
 .dot {
-  fill: #ffffff;
-  stroke-width: 1.1;
+  stroke: none;
+  opacity: 0;
+  transition: opacity 0.15s, r 0.15s;
 }
 
-.dot.revenue {
-  stroke: #f97316;
+.dot:hover {
+  opacity: 1;
 }
 
-.dot.profit {
-  stroke: #1d4ed8;
-}
-
-.dot.margin {
-  stroke: #059669;
-}
+.dot.revenue { fill: #f97316; }
+.dot.profit  { fill: #1d4ed8; }
+.dot.margin  { fill: #059669; }
 
 .line-axis {
   display: flex;
