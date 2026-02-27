@@ -297,11 +297,31 @@ export async function getStockKLine(symbol, market, period = 'daily') {
   try {
     if (market === MARKET_TYPE.CN) return await getCNStockKLine(symbol, period)
     if (market === MARKET_TYPE.HK) return await getHKStockKLine(symbol)
+    if (market === MARKET_TYPE.US) return await getUSStockKLine(symbol)
     return []
   } catch (error) {
     console.error('获取K线数据失败:', error)
     return []
   }
+}
+
+// 获取美股K线数据（Yahoo Finance）
+async function getUSStockKLine(symbol) {
+  const clean = symbol.replace(/^US/i, '').split('.')[0].toUpperCase()
+  const url = `/api/yahoo/v8/finance/chart/${clean}?interval=1d&range=2y`
+  const response = await request.get(url)
+  const result = response.data?.chart?.result?.[0]
+  if (!result) return []
+  const { timestamp, indicators } = result
+  const quote = indicators.quote[0]
+  return timestamp.map((ts, i) => ({
+    date: new Date(ts * 1000).toISOString().slice(0, 10),
+    open: parseFloat(quote.open[i]?.toFixed(2)),
+    close: parseFloat(quote.close[i]?.toFixed(2)),
+    high: parseFloat(quote.high[i]?.toFixed(2)),
+    low: parseFloat(quote.low[i]?.toFixed(2)),
+    volume: quote.volume[i] || 0
+  })).filter(d => !isNaN(d.close))
 }
 
 // 获取港股K线数据（腾讯财经接口）

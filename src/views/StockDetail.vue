@@ -105,16 +105,16 @@
               </n-space>
             </n-card>
 
-            <!-- K线图 - A股/港股支持 -->
-            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK'" title="K线图" class="chart-card">
+            <!-- K线图 -->
+            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="K线图" class="chart-card">
               <div v-if="klineData.length > 0">
                 <stock-chart :data="klineData" />
               </div>
               <n-empty v-else description="暂无K线数据" />
             </n-card>
 
-            <!-- 技术指标 - A股/港股支持 -->
-            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK'" title="技术指标" class="indicator-card">
+            <!-- 技术指标 -->
+            <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="技术指标" class="indicator-card">
               <n-grid :cols="3" :x-gap="24" :y-gap="20">
                 <n-grid-item>
                   <div class="indicator-item">

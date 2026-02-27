@@ -79,6 +79,14 @@ const basicHtmlProxyPlugin = () => ({
 
 // 代理配置（server和preview共用）
 const proxyConfig = {
+  '/api/yahoo': {
+    target: 'https://query1.finance.yahoo.com',
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/api\/yahoo/, ''),
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+    }
+  },
   '/api/sina': {
     target: 'https://hq.sinajs.cn',
     changeOrigin: true,
