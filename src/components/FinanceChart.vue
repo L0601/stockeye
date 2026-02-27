@@ -45,16 +45,8 @@ const init = () => {
       vertLines: { visible: false },
       horzLines: { color: 'rgba(0,0,0,0.06)' }
     },
-    leftPriceScale: {
-      visible: true,
-      borderColor: 'rgba(0,0,0,0.08)',
-      scaleMargins: { top: 0.12, bottom: 0.08 }
-    },
-    rightPriceScale: {
-      visible: true,
-      borderColor: 'rgba(0,0,0,0.08)',
-      scaleMargins: { top: 0.12, bottom: 0.08 }
-    },
+    leftPriceScale: { visible: false },
+    rightPriceScale: { visible: false },
     timeScale: {
       borderColor: 'rgba(0,0,0,0.08)',
       timeVisible: false
@@ -69,18 +61,24 @@ const init = () => {
     height: 220
   })
 
+  const scaleMargins = { top: 0.1, bottom: 0.1 }
   revSeries = chart.addSeries(LineSeries, {
     color: '#f97316', lineWidth: 2,
-    priceScaleId: 'left', lastValueVisible: false, priceLineVisible: false
+    priceScaleId: 'rev', lastValueVisible: false, priceLineVisible: false
   })
+  chart.priceScale('rev').applyOptions({ visible: false, scaleMargins })
+
   profitSeries = chart.addSeries(LineSeries, {
     color: '#1d4ed8', lineWidth: 2,
-    priceScaleId: 'left', lastValueVisible: false, priceLineVisible: false
+    priceScaleId: 'profit', lastValueVisible: false, priceLineVisible: false
   })
+  chart.priceScale('profit').applyOptions({ visible: false, scaleMargins })
+
   marginSeries = chart.addSeries(LineSeries, {
     color: '#059669', lineWidth: 2,
-    priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false
+    priceScaleId: 'margin', lastValueVisible: false, priceLineVisible: false
   })
+  chart.priceScale('margin').applyOptions({ visible: false, scaleMargins })
 
   updateData()
 
