@@ -295,15 +295,30 @@ async function getUSStockQuote(symbol) {
 // 获取历史K线数据
 export async function getStockKLine(symbol, market, period = 'daily') {
   try {
-    if (market === MARKET_TYPE.CN) {
-      return await getCNStockKLine(symbol, period)
-    }
-    // 港股、美股K线数据需要其他接口或付费API
+    if (market === MARKET_TYPE.CN) return await getCNStockKLine(symbol, period)
+    if (market === MARKET_TYPE.HK) return await getHKStockKLine(symbol)
     return []
   } catch (error) {
     console.error('获取K线数据失败:', error)
     return []
   }
+}
+
+// 获取港股K线数据（腾讯财经接口）
+async function getHKStockKLine(symbol) {
+  const num = symbol.replace(/^HK/i, '').replace(/^0+/, '') || '0'
+  const code = 'hk' + num.padStart(5, '0')
+  const url = `/api/qq/appstock/app/fqkline/get?param=${code},day,,,320,qfq`
+  const response = await request.get(url)
+  const klineData = response.data?.data?.[code]?.qfqday || []
+  return klineData.map(item => ({
+    date: item[0],
+    open: parseFloat(item[1]),
+    close: parseFloat(item[2]),
+    high: parseFloat(item[3]),
+    low: parseFloat(item[4]),
+    volume: parseFloat(item[5])
+  }))
 }
 
 // 获取A股K线数据

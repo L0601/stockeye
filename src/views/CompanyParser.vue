@@ -283,7 +283,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getCompanyMetrics, getCompanyPage, getFinancePage, MARKET_TYPE } from '@/api/stock'
+import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, MARKET_TYPE } from '@/api/stock'
 
 const router = useRouter()
 const route = useRoute()
@@ -294,6 +294,7 @@ const loading = ref(false)
 const error = ref('')
 const result = ref(null)
 const financeData = ref(null)
+const klineData = ref([])
 const visibleSeries = ref({
   revenue: true,
   profit: true,
@@ -421,6 +422,22 @@ const filteredFinanceData = computed(() => {
   }
 })
 
+const technicalCopyText = computed(() => {
+  const data = klineData.value
+  if (!data || data.length < 2) return ''
+  const len = data.length
+  const current = data[len - 1].close
+
+  const calcChange = (n) => {
+    const past = data[len - 1 - n]?.close
+    if (!past || !Number.isFinite(past) || past === 0) return '-'
+    const pct = ((current - past) / past * 100).toFixed(2)
+    return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`
+  }
+
+  return `技术指标: 5日涨跌 ${calcChange(5)} 20日涨跌 ${calcChange(20)} 120日涨跌 ${calcChange(120)}`
+})
+
 const financeCopyText = computed(() => {
   if (!filteredFinanceData.value || filteredFinanceData.value.periods.length === 0) return ''
   const rows = filteredFinanceData.value.rows
@@ -444,12 +461,9 @@ const financeCopyText = computed(() => {
 
 const displayText = computed(() => {
   const parts = []
-  if (summaryCopyText.value) {
-    parts.push(summaryCopyText.value)
-  }
-  if (financeCopyText.value) {
-    parts.push(financeCopyText.value)
-  }
+  if (summaryCopyText.value) parts.push(summaryCopyText.value)
+  if (technicalCopyText.value) parts.push(technicalCopyText.value)
+  if (financeCopyText.value) parts.push(financeCopyText.value)
   return parts.join('\n\n')
 })
 
@@ -649,6 +663,7 @@ const handleFetch = async () => {
   error.value = ''
   result.value = null
   financeData.value = null
+  klineData.value = []
   visibleSeries.value = {
     revenue: true,
     profit: true,
@@ -662,10 +677,12 @@ const handleFetch = async () => {
 
   loading.value = true
   try {
-    const [metrics, financeHtml] = await Promise.all([
+    const [metrics, financeHtml, kline] = await Promise.all([
       getCompanyMetrics(symbol.value, market.value),
-      getFinancePage(symbol.value, market.value)
+      getFinancePage(symbol.value, market.value),
+      getStockKLine(symbol.value, market.value)
     ])
+    klineData.value = kline || []
     if (financeHtml) {
       financeData.value = parseFinanceHtml(financeHtml)
     }
