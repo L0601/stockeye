@@ -378,6 +378,9 @@ const parseFinanceNumber = (value) => {
   return Number.isFinite(num) ? num * multiplier : NaN
 }
 
+const isAnnualPeriod = (period) =>
+  period.includes('年度') || period.includes('年报') || isAnnualPeriod(period)
+
 const pickFinanceRow = (rows, names) => {
   for (const name of names) {
     if (rows[name]) return rows[name]
@@ -406,7 +409,7 @@ const filteredFinanceData = computed(() => {
   const latestYear = Math.max(...periods.map(p => parseInt(p.substring(0, 4))))
   const indices = periods.reduce((acc, period, i) => {
     const year = parseInt(period.substring(0, 4))
-    if (year === latestYear || period.endsWith('12-31')) acc.push(i)
+    if (year === latestYear || isAnnualPeriod(period)) acc.push(i)
     return acc
   }, [])
 
@@ -428,7 +431,7 @@ const financeCopyText = computed(() => {
   const lines = ['财务数据:']
 
   filteredFinanceData.value.periods.forEach((period, index) => {
-    const type = period.endsWith('12-31') ? '年度' : '季度'
+    const type = isAnnualPeriod(period) ? '年度' : '季度'
     const revenueValue = formatFinanceValue(revenue[index])
     const profitValue = formatFinanceValue(profit[index])
     const grossValue = formatFinanceValue(gross[index])
