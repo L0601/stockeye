@@ -192,6 +192,9 @@
               :revenue="financeChart.series.revenue.nums"
               :profit="financeChart.series.profit.nums"
               :margin="financeChart.series.margin.nums"
+              :revenue-labels="financeChart.series.revenue.points.map(p => p.value)"
+              :profit-labels="financeChart.series.profit.points.map(p => p.value)"
+              :margin-labels="financeChart.series.margin.points.map(p => p.value)"
               :visible="visibleSeries"
             />
           </div>
