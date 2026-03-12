@@ -334,8 +334,11 @@ const filteredFinanceData = computed(() => {
   if (!periods || periods.length === 0) return financeData.value
 
   const latestYear = Math.max(...periods.map(p => parseInt(p.substring(0, 4))))
+  const latestYearHasAnnual = periods.some(p => parseInt(p.substring(0, 4)) === latestYear && isAnnualPeriod(p))
   const indices = periods.reduce((acc, period, i) => {
     const year = parseInt(period.substring(0, 4))
+    // 若最新年已有年报，跳过该年的季度数据
+    if (latestYearHasAnnual && year === latestYear && !isAnnualPeriod(period)) return acc
     if (year === latestYear || isAnnualPeriod(period)) acc.push(i)
     return acc
   }, [])
