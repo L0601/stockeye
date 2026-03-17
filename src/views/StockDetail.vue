@@ -115,28 +115,18 @@
 
             <!-- 技术指标 -->
             <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="技术指标" class="indicator-card">
-              <n-grid :cols="3" :x-gap="24" :y-gap="20">
-                <n-grid-item>
+              <n-grid :cols="5" :x-gap="24" :y-gap="20">
+                <n-grid-item v-for="item in [
+                  { label: '5日涨跌', value: change5d },
+                  { label: '20日涨跌', value: change20d },
+                  { label: '60日涨跌', value: change60d },
+                  { label: '120日涨跌', value: change120d },
+                  { label: '250日涨跌', value: change250d }
+                ]" :key="item.label">
                   <div class="indicator-item">
-                    <span class="indicator-label">5日涨跌</span>
-                    <div class="indicator-value" :class="change5d >= 0 ? 'value-up' : 'value-down'">
-                      {{ change5d ? (change5d >= 0 ? '+' : '') + change5d.toFixed(2) + '%' : '-' }}
-                    </div>
-                  </div>
-                </n-grid-item>
-                <n-grid-item>
-                  <div class="indicator-item">
-                    <span class="indicator-label">20日涨跌</span>
-                    <div class="indicator-value" :class="change20d >= 0 ? 'value-up' : 'value-down'">
-                      {{ change20d ? (change20d >= 0 ? '+' : '') + change20d.toFixed(2) + '%' : '-' }}
-                    </div>
-                  </div>
-                </n-grid-item>
-                <n-grid-item>
-                  <div class="indicator-item">
-                    <span class="indicator-label">120日涨跌</span>
-                    <div class="indicator-value" :class="change120d >= 0 ? 'value-up' : 'value-down'">
-                      {{ change120d ? (change120d >= 0 ? '+' : '') + change120d.toFixed(2) + '%' : '-' }}
+                    <span class="indicator-label">{{ item.label }}</span>
+                    <div class="indicator-value" :class="item.value != null ? (item.value >= 0 ? 'value-up' : 'value-down') : ''">
+                      {{ item.value != null ? (item.value >= 0 ? '+' : '') + item.value.toFixed(2) + '%' : '-' }}
                     </div>
                   </div>
                 </n-grid-item>
@@ -178,10 +168,24 @@ const change20d = computed(() => {
   return ((current - past) / past * 100)
 })
 
+const change60d = computed(() => {
+  if (klineData.value.length < 61) return null
+  const current = klineData.value[klineData.value.length - 1].close
+  const past = klineData.value[klineData.value.length - 61].close
+  return ((current - past) / past * 100)
+})
+
 const change120d = computed(() => {
   if (klineData.value.length < 121) return null
   const current = klineData.value[klineData.value.length - 1].close
   const past = klineData.value[klineData.value.length - 121].close
+  return ((current - past) / past * 100)
+})
+
+const change250d = computed(() => {
+  if (klineData.value.length < 251) return null
+  const current = klineData.value[klineData.value.length - 1].close
+  const past = klineData.value[klineData.value.length - 251].close
   return ((current - past) / past * 100)
 })
 
