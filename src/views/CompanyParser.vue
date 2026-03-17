@@ -142,6 +142,24 @@
               </div>
             </div>
           </div>
+
+          <div v-if="technicalChanges" class="section section-technical">
+            <div class="section-header">
+              <span>技术走势</span>
+            </div>
+            <div class="section-grid">
+              <div
+                v-for="item in technicalChanges"
+                :key="item.label"
+                :class="['metric', item.value === null ? '' : item.value >= 0 ? 'metric-positive' : 'metric-negative']"
+              >
+                <span class="metric-label">{{ item.label }}</span>
+                <span class="metric-value">
+                  {{ item.value === null ? '-' : (item.value >= 0 ? '+' : '') + item.value.toFixed(2) + '%' }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-else class="empty-state">
@@ -354,6 +372,25 @@ const filteredFinanceData = computed(() => {
   }
 })
 
+const technicalChanges = computed(() => {
+  const data = klineData.value
+  if (!data || data.length < 2) return null
+  const len = data.length
+  const current = data[len - 1].close
+  const calcChange = (n) => {
+    const past = data[len - 1 - n]?.close
+    if (!past || !Number.isFinite(past) || past === 0) return null
+    return (current - past) / past * 100
+  }
+  return [
+    { label: '5日涨跌', value: calcChange(5) },
+    { label: '20日涨跌', value: calcChange(20) },
+    { label: '60日涨跌', value: calcChange(60) },
+    { label: '120日涨跌', value: calcChange(120) },
+    { label: '250日涨跌', value: calcChange(250) }
+  ]
+})
+
 const technicalCopyText = computed(() => {
   const data = klineData.value
   if (!data || data.length < 2) return ''
@@ -367,7 +404,7 @@ const technicalCopyText = computed(() => {
     return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`
   }
 
-  return `技术指标: 5日涨跌 ${calcChange(5)} 20日涨跌 ${calcChange(20)} 120日涨跌 ${calcChange(120)}`
+  return `技术指标: 5日涨跌 ${calcChange(5)} 20日涨跌 ${calcChange(20)} 60日涨跌 ${calcChange(60)} 120日涨跌 ${calcChange(120)} 250日涨跌 ${calcChange(250)}`
 })
 
 const financeCopyText = computed(() => {
@@ -1035,6 +1072,15 @@ input:focus {
 .section-value {
   background: linear-gradient(135deg, rgba(236, 253, 245, 0.85), rgba(255, 255, 255, 0.75));
   border-color: rgba(16, 185, 129, 0.18);
+}
+
+.section-technical {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.85), rgba(255, 255, 255, 0.75));
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.section-technical .section-header::before {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.7), transparent);
 }
 
 .section-header {
