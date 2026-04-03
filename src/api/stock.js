@@ -384,12 +384,29 @@ export async function getStockKLine(symbol, market, period = 'daily', adjust = A
   }
 }
 
+function mapUSKLineQuery(period) {
+  if (period === 'monthly') return 'interval=1mo&range=20y'
+  if (period === 'quarterly') return 'interval=3mo&range=20y'
+  return 'interval=1d&range=2y'
+}
+
+function mapQQPeriod(period) {
+  if (period === 'monthly') return 'month'
+  if (period === 'quarterly') return 'quarter'
+  if (period === 'yearly') return 'year'
+  return 'day'
+}
+
+function pickQQKLineData(stockData, qqPeriod, adjust) {
+  if (!stockData) return []
+  return stockData?.[`${adjust}${qqPeriod}`] || stockData?.[qqPeriod] || []
+}
+
 // 获取美股K线数据（Yahoo Finance）
 async function getUSStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
+  if (period === 'yearly') return []
   const clean = symbol.replace(/^US/i, '').split('.')[0].toUpperCase()
-  const query = period === 'monthly'
-    ? 'interval=1mo&range=20y'
-    : 'interval=1d&range=2y'
+  const query = mapUSKLineQuery(period)
   const url = `/api/yahoo/v8/finance/chart/${clean}?${query}`
   const response = await request.get(url)
   const result = response.data?.chart?.result?.[0]
@@ -417,14 +434,12 @@ async function getUSStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QF
 async function getHKStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   const num = symbol.replace(/^HK/i, '').replace(/^0+/, '') || '0'
   const code = 'hk' + num.padStart(5, '0')
-  const qqPeriod = period === 'monthly' ? 'month' : 'day'
-  const limit = period === 'monthly' ? 320 : 320
+  const qqPeriod = mapQQPeriod(period)
+  const limit = 320
   const url = `/api/qq/appstock/app/fqkline/get?param=${code},${qqPeriod},,,${limit},${adjust}`
   const response = await request.get(url)
   const stockData = response.data?.data?.[code]
-  const klineData = period === 'monthly'
-    ? stockData?.[`${adjust}month`] || stockData?.month || []
-    : stockData?.[`${adjust}day`] || stockData?.day || []
+  const klineData = pickQQKLineData(stockData, qqPeriod, adjust)
   return klineData.map(item => ({
     date: item[0],
     open: parseFloat(item[1]),
@@ -438,15 +453,13 @@ async function getHKStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QF
 // 获取A股K线数据
 async function getCNStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   const prefix = getCNExchangePrefix(symbol)
-  const qqPeriod = period === 'monthly' ? 'month' : 'day'
-  const limit = period === 'monthly' ? 320 : 320
+  const qqPeriod = mapQQPeriod(period)
+  const limit = 320
   const url = `/api/qq/appstock/app/fqkline/get?param=${prefix}${symbol},${qqPeriod},,,${limit},${adjust}`
 
   const response = await request.get(url)
   const stockData = response.data?.data?.[`${prefix}${symbol}`]
-  const klineData = period === 'monthly'
-    ? stockData?.[`${adjust}month`] || stockData?.month || []
-    : stockData?.[`${adjust}day`] || stockData?.day || []
+  const klineData = pickQQKLineData(stockData, qqPeriod, adjust)
 
   return klineData.map(item => ({
     date: item[0],

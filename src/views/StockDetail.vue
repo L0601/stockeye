@@ -193,6 +193,8 @@ const symbol = ref(route.params.symbol)
 const stockInfo = ref({})
 const klineData = ref([])
 const indicatorMonthlyKlineData = ref([])
+const quarterlyKlineData = ref([])
+const yearlyKlineData = ref([])
 const loading = ref(false)
 const activeKlineType = ref('daily')
 
@@ -234,24 +236,22 @@ const longTermIndicators = computed(() =>
   }))
 )
 
-const quarterKlineData = computed(() =>
-  aggregateKline(indicatorMonthlyKlineData.value, 'quarterly')
-)
-
-const yearKlineData = computed(() =>
-  aggregateKline(indicatorMonthlyKlineData.value, 'yearly')
-)
-
 const displayKlineData = computed(() => {
   if (activeKlineType.value === 'monthly') return indicatorMonthlyKlineData.value
-  if (activeKlineType.value === 'quarterly') return quarterKlineData.value
-  if (activeKlineType.value === 'yearly') return yearKlineData.value
+  if (activeKlineType.value === 'quarterly') return quarterlyKlineData.value
+  if (activeKlineType.value === 'yearly') return yearlyKlineData.value
   return klineData.value
 })
 
 const activeKlineNote = computed(() => {
   if (activeKlineType.value === 'daily') return '日K按当前日线数据展示'
-  return '月K、季K、年K按后复权口径展示'
+  if (stockInfo.value.market === 'CN' && activeKlineType.value === 'quarterly') {
+    return '季K由后复权月线聚合，月K和年K为原生后复权'
+  }
+  if (stockInfo.value.market === 'US' && activeKlineType.value === 'yearly') {
+    return '年K由后复权月线聚合，月K和季K为原生后复权'
+  }
+  return '当前周期按后复权口径展示'
 })
 
 onMounted(() => {
@@ -276,13 +276,21 @@ const loadData = async () => {
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
     if (!stock) return
-    const [kline, , indicatorMonthlyKline] = await Promise.all([
+    const [kline, indicatorMonthlyKline, quarterlyKline, yearlyKline] = await Promise.all([
       getStockKLine(stock.symbol, stock.market),
-      getStockKLine(stock.symbol, stock.market, 'monthly'),
-      getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq')
+      getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq'),
+      getStockKLine(stock.symbol, stock.market, 'quarterly', 'hfq'),
+      getStockKLine(stock.symbol, stock.market, 'yearly', 'hfq')
     ])
+    const monthlyData = indicatorMonthlyKline || []
     klineData.value = kline || []
-    indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
+    indicatorMonthlyKlineData.value = monthlyData
+    quarterlyKlineData.value = quarterlyKline?.length
+      ? quarterlyKline
+      : aggregateKline(monthlyData, 'quarterly')
+    yearlyKlineData.value = yearlyKline?.length
+      ? yearlyKline
+      : aggregateKline(monthlyData, 'yearly')
   } catch (e) {
     console.error('加载K线失败:', e)
   }
