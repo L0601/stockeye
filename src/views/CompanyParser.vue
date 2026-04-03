@@ -147,9 +147,22 @@
             <div class="section-header">
               <span>技术走势</span>
             </div>
+            <div class="section-note">说明：涨幅指标按后复权口径计算</div>
             <div class="section-grid">
               <div
                 v-for="item in technicalChanges"
+                :key="item.label"
+                :class="['metric', item.value === null ? '' : item.value >= 0 ? 'metric-positive' : 'metric-negative']"
+              >
+                <span class="metric-label">{{ item.label }}</span>
+                <span class="metric-value">
+                  {{ item.value === null ? '-' : (item.value >= 0 ? '+' : '') + item.value.toFixed(2) + '%' }}
+                </span>
+              </div>
+            </div>
+            <div v-if="longTermTechnicalChanges" class="section-grid section-grid-secondary">
+              <div
+                v-for="item in longTermTechnicalChanges"
                 :key="item.label"
                 :class="['metric', item.value === null ? '' : item.value >= 0 ? 'metric-positive' : 'metric-negative']"
               >
@@ -248,6 +261,9 @@ const error = ref('')
 const result = ref(null)
 const financeData = ref(null)
 const klineData = ref([])
+const monthlyKlineData = ref([])
+const indicatorKlineData = ref([])
+const indicatorMonthlyKlineData = ref([])
 const visibleSeries = ref({
   revenue: true,
   profit: true,
@@ -373,38 +389,34 @@ const filteredFinanceData = computed(() => {
 })
 
 const technicalChanges = computed(() => {
-  const data = klineData.value
+  const data = indicatorKlineData.value
   if (!data || data.length < 2) return null
-  const len = data.length
-  const current = data[len - 1].close
-  const calcChange = (n) => {
-    const past = data[len - 1 - n]?.close
-    if (!past || !Number.isFinite(past) || past === 0) return null
-    return (current - past) / past * 100
-  }
   return [
-    { label: '5日涨跌', value: calcChange(5) },
-    { label: '20日涨跌', value: calcChange(20) },
-    { label: '60日涨跌', value: calcChange(60) },
-    { label: '120日涨跌', value: calcChange(120) },
-    { label: '250日涨跌', value: calcChange(250) }
+    { label: '5日涨跌', value: calcSeriesChange(data, 5) },
+    { label: '20日涨跌', value: calcSeriesChange(data, 20) },
+    { label: '60日涨跌', value: calcSeriesChange(data, 60) },
+    { label: '120日涨跌', value: calcSeriesChange(data, 120) },
+    { label: '250日涨跌', value: calcSeriesChange(data, 250) }
+  ]
+})
+
+const longTermTechnicalChanges = computed(() => {
+  const data = indicatorMonthlyKlineData.value
+  if (!data || data.length < 2) return null
+  return [
+    { label: '2年涨跌', value: calcSeriesChange(data, 24) },
+    { label: '3年涨跌', value: calcSeriesChange(data, 36) },
+    { label: '5年涨跌', value: calcSeriesChange(data, 60) },
+    { label: '10年涨跌', value: calcSeriesChange(data, 120) },
+    { label: '20年涨跌', value: calcSeriesChange(data, 240) }
   ]
 })
 
 const technicalCopyText = computed(() => {
-  const data = klineData.value
-  if (!data || data.length < 2) return ''
-  const len = data.length
-  const current = data[len - 1].close
-
-  const calcChange = (n) => {
-    const past = data[len - 1 - n]?.close
-    if (!past || !Number.isFinite(past) || past === 0) return '-'
-    const pct = ((current - past) / past * 100).toFixed(2)
-    return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`
-  }
-
-  return `技术指标: 5日涨跌 ${calcChange(5)} 20日涨跌 ${calcChange(20)} 60日涨跌 ${calcChange(60)} 120日涨跌 ${calcChange(120)} 250日涨跌 ${calcChange(250)}`
+  const shortText = formatTechnicalCopy(technicalChanges.value)
+  const longText = formatTechnicalCopy(longTermTechnicalChanges.value)
+  if (!shortText && !longText) return ''
+  return ['技术指标:', shortText, longText].filter(Boolean).join(' ')
 })
 
 const financeCopyText = computed(() => {
@@ -427,6 +439,26 @@ const financeCopyText = computed(() => {
 
   return lines.join('\n')
 })
+
+const calcSeriesChange = (data, periods) => {
+  const len = data?.length || 0
+  if (len <= periods) return null
+  const current = data[len - 1]?.close
+  const past = data[len - 1 - periods]?.close
+  if (!past || !Number.isFinite(past) || past === 0 || !Number.isFinite(current)) return null
+  return (current - past) / past * 100
+}
+
+const formatChangeText = (value) => {
+  if (value === null || value === undefined) return '-'
+  const pct = value.toFixed(2)
+  return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`
+}
+
+const formatTechnicalCopy = (items) => {
+  if (!items?.length) return ''
+  return items.map(item => `${item.label} ${formatChangeText(item.value)}`).join(' ')
+}
 
 const displayText = computed(() => {
   const parts = []
@@ -696,6 +728,9 @@ const handleFetch = async () => {
   result.value = null
   financeData.value = null
   klineData.value = []
+  monthlyKlineData.value = []
+  indicatorKlineData.value = []
+  indicatorMonthlyKlineData.value = []
   visibleSeries.value = {
     revenue: true,
     profit: true,
@@ -709,12 +744,18 @@ const handleFetch = async () => {
 
   loading.value = true
   try {
-    const [metrics, financeHtml, kline] = await Promise.all([
+    const [metrics, financeHtml, kline, monthlyKline, indicatorKline, indicatorMonthlyKline] = await Promise.all([
       getCompanyMetrics(symbol.value, market.value),
       getFinancePage(symbol.value, market.value),
-      getStockKLine(symbol.value, market.value)
+      getStockKLine(symbol.value, market.value),
+      getStockKLine(symbol.value, market.value, 'monthly'),
+      getStockKLine(symbol.value, market.value, 'daily', 'hfq'),
+      getStockKLine(symbol.value, market.value, 'monthly', 'hfq')
     ])
     klineData.value = kline || []
+    monthlyKlineData.value = monthlyKline || []
+    indicatorKlineData.value = indicatorKline || []
+    indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
     if (financeHtml) {
       financeData.value = parseFinanceHtml(financeHtml)
     }
@@ -1122,6 +1163,16 @@ input:focus {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 18px;
+}
+
+.section-note {
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.section-grid-secondary {
+  margin-top: 18px;
 }
 
 .metric {

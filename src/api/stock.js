@@ -18,6 +18,11 @@ export const STOCK_TYPE = {
   INDEX: 'index'
 }
 
+const ADJUST_TYPE = {
+  QFQ: 'qfq',
+  HFQ: 'hfq'
+}
+
 // 判断是否是美国夏令时（3月第二个周日 - 11月第一个周日）
 function isDST(date) {
   const year = date.getFullYear()
@@ -293,11 +298,11 @@ async function getUSStockQuote(symbol) {
 }
 
 // 获取历史K线数据
-export async function getStockKLine(symbol, market, period = 'daily') {
+export async function getStockKLine(symbol, market, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   try {
-    if (market === MARKET_TYPE.CN) return await getCNStockKLine(symbol, period)
-    if (market === MARKET_TYPE.HK) return await getHKStockKLine(symbol)
-    if (market === MARKET_TYPE.US) return await getUSStockKLine(symbol)
+    if (market === MARKET_TYPE.CN) return await getCNStockKLine(symbol, period, adjust)
+    if (market === MARKET_TYPE.HK) return await getHKStockKLine(symbol, period, adjust)
+    if (market === MARKET_TYPE.US) return await getUSStockKLine(symbol, period, adjust)
     return []
   } catch (error) {
     console.error('获取K线数据失败:', error)
@@ -306,18 +311,28 @@ export async function getStockKLine(symbol, market, period = 'daily') {
 }
 
 // 获取美股K线数据（Yahoo Finance）
-async function getUSStockKLine(symbol) {
+async function getUSStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   const clean = symbol.replace(/^US/i, '').split('.')[0].toUpperCase()
-  const url = `/api/yahoo/v8/finance/chart/${clean}?interval=1d&range=2y`
+  const query = period === 'monthly'
+    ? 'interval=1mo&range=20y'
+    : 'interval=1d&range=2y'
+  const url = `/api/yahoo/v8/finance/chart/${clean}?${query}`
   const response = await request.get(url)
   const result = response.data?.chart?.result?.[0]
   if (!result) return []
   const { timestamp, indicators } = result
   const quote = indicators.quote[0]
+  const adjClose = indicators.adjclose?.[0]?.adjclose || []
+
+  const pickClose = (index) => {
+    if (adjust !== ADJUST_TYPE.HFQ) return quote.close[index]
+    return Number.isFinite(adjClose[index]) ? adjClose[index] : quote.close[index]
+  }
+
   return timestamp.map((ts, i) => ({
     date: new Date(ts * 1000).toISOString().slice(0, 10),
     open: parseFloat(quote.open[i]?.toFixed(2)),
-    close: parseFloat(quote.close[i]?.toFixed(2)),
+    close: parseFloat(pickClose(i)?.toFixed(2)),
     high: parseFloat(quote.high[i]?.toFixed(2)),
     low: parseFloat(quote.low[i]?.toFixed(2)),
     volume: quote.volume[i] || 0
@@ -325,13 +340,17 @@ async function getUSStockKLine(symbol) {
 }
 
 // 获取港股K线数据（腾讯财经接口）
-async function getHKStockKLine(symbol) {
+async function getHKStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   const num = symbol.replace(/^HK/i, '').replace(/^0+/, '') || '0'
   const code = 'hk' + num.padStart(5, '0')
-  const url = `/api/qq/appstock/app/fqkline/get?param=${code},day,,,320,qfq`
+  const qqPeriod = period === 'monthly' ? 'month' : 'day'
+  const limit = period === 'monthly' ? 320 : 320
+  const url = `/api/qq/appstock/app/fqkline/get?param=${code},${qqPeriod},,,${limit},${adjust}`
   const response = await request.get(url)
   const stockData = response.data?.data?.[code]
-  const klineData = stockData?.qfqday || stockData?.day || []
+  const klineData = period === 'monthly'
+    ? stockData?.[`${adjust}month`] || stockData?.month || []
+    : stockData?.[`${adjust}day`] || stockData?.day || []
   return klineData.map(item => ({
     date: item[0],
     open: parseFloat(item[1]),
@@ -343,13 +362,17 @@ async function getHKStockKLine(symbol) {
 }
 
 // 获取A股K线数据
-async function getCNStockKLine(symbol, period) {
-  // 使用腾讯财经接口获取K线数据
+async function getCNStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
   const prefix = symbol.startsWith('6') ? 'sh' : 'sz'
-  const url = `/api/qq/appstock/app/fqkline/get?param=${prefix}${symbol},day,,,320,qfq`
+  const qqPeriod = period === 'monthly' ? 'month' : 'day'
+  const limit = period === 'monthly' ? 320 : 320
+  const url = `/api/qq/appstock/app/fqkline/get?param=${prefix}${symbol},${qqPeriod},,,${limit},${adjust}`
 
   const response = await request.get(url)
-  const klineData = response.data?.data?.[`${prefix}${symbol}`]?.qfqday || []
+  const stockData = response.data?.data?.[`${prefix}${symbol}`]
+  const klineData = period === 'monthly'
+    ? stockData?.[`${adjust}month`] || stockData?.month || []
+    : stockData?.[`${adjust}day`] || stockData?.day || []
 
   return klineData.map(item => ({
     date: item[0],

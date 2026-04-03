@@ -115,22 +115,38 @@
 
             <!-- 技术指标 -->
             <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="技术指标" class="indicator-card">
-              <n-grid :cols="5" :x-gap="24" :y-gap="20">
-                <n-grid-item v-for="item in [
-                  { label: '5日涨跌', value: change5d },
-                  { label: '20日涨跌', value: change20d },
-                  { label: '60日涨跌', value: change60d },
-                  { label: '120日涨跌', value: change120d },
-                  { label: '250日涨跌', value: change250d }
-                ]" :key="item.label">
-                  <div class="indicator-item">
+              <div class="indicator-group">
+                <div class="indicator-group-header">
+                  <span class="group-title">短期趋势</span>
+                  <span class="group-desc">基于日 K 计算</span>
+                </div>
+                <div class="indicator-note">说明：涨幅指标按后复权口径计算</div>
+                <div class="indicator-grid">
+                  <div v-for="item in shortTermIndicators" :key="item.label" class="indicator-item">
                     <span class="indicator-label">{{ item.label }}</span>
+                    <span class="indicator-hint">{{ item.hint }}</span>
                     <div class="indicator-value" :class="item.value != null ? (item.value >= 0 ? 'value-up' : 'value-down') : ''">
-                      {{ item.value != null ? (item.value >= 0 ? '+' : '') + item.value.toFixed(2) + '%' : '-' }}
+                      {{ formatChange(item.value) }}
                     </div>
                   </div>
-                </n-grid-item>
-              </n-grid>
+                </div>
+              </div>
+
+              <div class="indicator-group long-term-group">
+                <div class="indicator-group-header">
+                  <span class="group-title">长期趋势</span>
+                  <span class="group-desc">基于月 K 计算</span>
+                </div>
+                <div v-if="longTermIndicators.length" class="indicator-grid">
+                  <div v-for="item in longTermIndicators" :key="item.label" class="indicator-item">
+                    <span class="indicator-label">{{ item.label }}</span>
+                    <div class="indicator-value" :class="item.value != null ? (item.value >= 0 ? 'value-up' : 'value-down') : ''">
+                      {{ formatChange(item.value) }}
+                    </div>
+                  </div>
+                </div>
+                <n-empty v-else description="暂无月K数据" />
+              </div>
             </n-card>
 
           </n-space>
@@ -152,42 +168,48 @@ const router = useRouter()
 const symbol = ref(route.params.symbol)
 const stockInfo = ref({})
 const klineData = ref([])
+const monthlyKlineData = ref([])
+const indicatorKlineData = ref([])
+const indicatorMonthlyKlineData = ref([])
 const loading = ref(false)
 
-const change5d = computed(() => {
-  if (klineData.value.length < 6) return null
-  const current = klineData.value[klineData.value.length - 1].close
-  const past = klineData.value[klineData.value.length - 6].close
-  return ((current - past) / past * 100)
-})
+const shortTermConfigs = [
+  { label: '5日涨跌', hint: '约1周', periods: 5 },
+  { label: '20日涨跌', hint: '约1个月', periods: 20 },
+  { label: '60日涨跌', hint: '约1个季度', periods: 60 },
+  { label: '120日涨跌', hint: '约半年', periods: 120 },
+  { label: '250日涨跌', hint: '约1年', periods: 250 }
+]
 
-const change20d = computed(() => {
-  if (klineData.value.length < 21) return null
-  const current = klineData.value[klineData.value.length - 1].close
-  const past = klineData.value[klineData.value.length - 21].close
-  return ((current - past) / past * 100)
-})
+const longTermConfigs = [
+  { label: '2年涨跌', periods: 24 },
+  { label: '3年涨跌', periods: 36 },
+  { label: '5年涨跌', periods: 60 },
+  { label: '10年涨跌', periods: 120 },
+  { label: '20年涨跌', periods: 240 }
+]
 
-const change60d = computed(() => {
-  if (klineData.value.length < 61) return null
-  const current = klineData.value[klineData.value.length - 1].close
-  const past = klineData.value[klineData.value.length - 61].close
-  return ((current - past) / past * 100)
-})
+const calcChange = (data, periods) => {
+  if (data.length <= periods) return null
+  const current = data[data.length - 1]?.close
+  const past = data[data.length - 1 - periods]?.close
+  if (!current || !past) return null
+  return (current - past) / past * 100
+}
 
-const change120d = computed(() => {
-  if (klineData.value.length < 121) return null
-  const current = klineData.value[klineData.value.length - 1].close
-  const past = klineData.value[klineData.value.length - 121].close
-  return ((current - past) / past * 100)
-})
+const shortTermIndicators = computed(() =>
+  shortTermConfigs.map(item => ({
+    ...item,
+    value: calcChange(indicatorKlineData.value, item.periods)
+  }))
+)
 
-const change250d = computed(() => {
-  if (klineData.value.length < 251) return null
-  const current = klineData.value[klineData.value.length - 1].close
-  const past = klineData.value[klineData.value.length - 251].close
-  return ((current - past) / past * 100)
-})
+const longTermIndicators = computed(() =>
+  longTermConfigs.map(item => ({
+    ...item,
+    value: calcChange(indicatorMonthlyKlineData.value, item.periods)
+  }))
+)
 
 onMounted(() => {
   loadData()
@@ -211,8 +233,16 @@ const loadData = async () => {
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
     if (!stock) return
-    const kline = await getStockKLine(stock.symbol, stock.market)
-    if (kline?.length) klineData.value = kline
+    const [kline, monthlyKline, indicatorKline, indicatorMonthlyKline] = await Promise.all([
+      getStockKLine(stock.symbol, stock.market),
+      getStockKLine(stock.symbol, stock.market, 'monthly'),
+      getStockKLine(stock.symbol, stock.market, 'daily', 'hfq'),
+      getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq')
+    ])
+    klineData.value = kline || []
+    monthlyKlineData.value = monthlyKline || []
+    indicatorKlineData.value = indicatorKline || []
+    indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
   } catch (e) {
     console.error('加载K线失败:', e)
   }
@@ -265,6 +295,10 @@ const formatAmount = (amount) => {
   return amount.toFixed(2)
 }
 
+const formatChange = (value) => {
+  if (value == null) return '-'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
 
 const getMarketName = (market) => {
   const names = {
@@ -536,14 +570,61 @@ const getMarketTagType = (market) => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+.indicator-group {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.long-term-group {
+  margin-top: 28px;
+}
+
+.indicator-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.group-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #18181b;
+}
+
+.group-desc {
+  font-size: 13px;
+  color: #71717a;
+}
+
+.indicator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.indicator-note {
+  font-size: 12px;
+  color: #71717a;
+}
+
 .indicator-label {
   display: block;
   font-size: 14px;
   color: #71717a;
   font-weight: 500;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.indicator-hint {
+  display: block;
+  font-size: 12px;
+  color: #a1a1aa;
+  margin-bottom: 16px;
 }
 
 .indicator-value {
@@ -594,5 +675,25 @@ const getMarketTagType = (market) => {
 :deep(.n-empty__description) {
   color: #71717a;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .detail-header {
+    padding: 16px 20px !important;
+  }
+
+  .detail-content {
+    padding: 20px !important;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .price-value {
+    font-size: 40px;
+  }
 }
 </style>
