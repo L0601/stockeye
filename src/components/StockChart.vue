@@ -1,9 +1,16 @@
 <template>
-  <div ref="chartRef" style="width: 100%; height: 400px"></div>
+  <div class="stock-chart-panel">
+    <div class="ma-strip">
+      <span class="ma-item ma5">MA5 {{ latestMa.ma5 }}</span>
+      <span class="ma-item ma10">MA10 {{ latestMa.ma10 }}</span>
+      <span class="ma-item ma20">MA20 {{ latestMa.ma20 }}</span>
+    </div>
+    <div ref="chartRef" class="chart"></div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import * as echarts from 'echarts/dist/echarts.esm.mjs'
 
 const props = defineProps({
@@ -12,6 +19,18 @@ const props = defineProps({
 
 const chartRef = ref(null)
 let chartInstance = null
+
+const calcMAValue = (n) => {
+  if (props.data.length < n) return '-'
+  const sum = props.data.slice(-n).reduce((acc, item) => acc + item.close, 0)
+  return (sum / n).toFixed(2)
+}
+
+const latestMa = computed(() => ({
+  ma5: calcMAValue(5),
+  ma10: calcMAValue(10),
+  ma20: calcMAValue(20)
+}))
 
 const initChart = () => {
   if (!chartRef.value) return
@@ -108,3 +127,42 @@ onMounted(() => setTimeout(initChart, 50))
 onUnmounted(() => chartInstance?.dispose())
 watch(() => props.data, updateChart, { deep: true })
 </script>
+
+<style scoped>
+.stock-chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ma-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ma-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ma5 {
+  color: #667eea;
+}
+
+.ma10 {
+  color: #764ba2;
+}
+
+.ma20 {
+  color: #f59e0b;
+}
+
+.chart {
+  width: 100%;
+  height: 400px;
+}
+</style>

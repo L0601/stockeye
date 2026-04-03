@@ -243,15 +243,19 @@ const displayKlineData = computed(() => {
   return klineData.value
 })
 
+const chartAdjustMode = computed(() =>
+  stockInfo.value.market === 'US' ? '原始价格' : '前复权'
+)
+
 const activeKlineNote = computed(() => {
-  if (activeKlineType.value === 'daily') return '日K按当前日线数据展示'
+  if (activeKlineType.value === 'daily') return `日K按${chartAdjustMode.value}口径展示`
   if (stockInfo.value.market === 'CN' && activeKlineType.value === 'quarterly') {
-    return '季K由后复权月线聚合，月K和年K为原生后复权'
+    return `季K按${chartAdjustMode.value}月线聚合，月K和年K为原生${chartAdjustMode.value}`
   }
   if (stockInfo.value.market === 'US' && activeKlineType.value === 'yearly') {
-    return '年K由后复权月线聚合，月K和季K为原生后复权'
+    return '年K由原始月线聚合，月K和季K为原生原始价格'
   }
-  return '当前周期按后复权口径展示'
+  return `当前周期按${chartAdjustMode.value}口径展示`
 })
 
 onMounted(() => {
@@ -278,9 +282,9 @@ const loadData = async () => {
     if (!stock) return
     const [kline, indicatorMonthlyKline, quarterlyKline, yearlyKline] = await Promise.all([
       getStockKLine(stock.symbol, stock.market),
-      getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq'),
-      getStockKLine(stock.symbol, stock.market, 'quarterly', 'hfq'),
-      getStockKLine(stock.symbol, stock.market, 'yearly', 'hfq')
+      getStockKLine(stock.symbol, stock.market, 'monthly', 'qfq'),
+      getStockKLine(stock.symbol, stock.market, 'quarterly', 'qfq'),
+      getStockKLine(stock.symbol, stock.market, 'yearly', 'qfq')
     ])
     const monthlyData = indicatorMonthlyKline || []
     klineData.value = kline || []
@@ -288,7 +292,7 @@ const loadData = async () => {
     quarterlyKlineData.value = quarterlyKline?.length
       ? quarterlyKline
       : aggregateKline(monthlyData, 'quarterly')
-    yearlyKlineData.value = yearlyKline?.length
+    yearlyKlineData.value = yearlyKline?.length > 1
       ? yearlyKline
       : aggregateKline(monthlyData, 'yearly')
   } catch (e) {
