@@ -182,8 +182,8 @@ const getCardClass = (index) => {
 
 .stock-bento-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
   grid-auto-rows: auto;
   grid-auto-flow: dense;
 }
@@ -192,21 +192,21 @@ const getCardClass = (index) => {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 24px;
-  padding: 18px;
+  border-radius: 20px;
+  padding: 14px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 /* Bento Grid Variations */
 .card-large {
-  grid-column: span 2;
+  grid-column: span 1;
 }
 
 .card-medium {
@@ -282,7 +282,7 @@ const getCardClass = (index) => {
 
 .stock-name {
   margin: 0 0 6px 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #18181b;
   letter-spacing: -0.02em;
@@ -292,15 +292,15 @@ const getCardClass = (index) => {
 }
 
 .stock-symbol {
-  font-size: 13px;
+  font-size: 12px;
   color: #71717a;
   font-weight: 500;
   letter-spacing: 0.02em;
 }
 
 .delete-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -328,12 +328,12 @@ const getCardClass = (index) => {
 .price-display {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin: 8px 0;
+  gap: 10px;
+  margin: 4px 0;
 }
 
 .current-price {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -348,7 +348,7 @@ const getCardClass = (index) => {
 }
 
 .price-change {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -357,7 +357,7 @@ const getCardClass = (index) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
@@ -368,9 +368,9 @@ const getCardClass = (index) => {
 }
 
 .tag {
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.01em;
   border: 1px solid;
@@ -417,7 +417,7 @@ const getCardClass = (index) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: #a1a1aa;
   font-weight: 500;
 }
