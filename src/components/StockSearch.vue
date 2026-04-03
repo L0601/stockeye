@@ -46,6 +46,9 @@
               <span v-if="stock.type === 'index'" class="result-tag tag-index">
                 指数
               </span>
+              <span v-else-if="stock.type === 'etf'" class="result-tag tag-etf">
+                ETF
+              </span>
             </div>
           </div>
           <span class="result-symbol">{{ stock.symbol }}</span>
@@ -208,6 +211,11 @@ const getMarketName = (market) => {
   padding: 20px;
   color: #71717a;
   font-size: 14px;
+}
+
+.tag-etf {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
 }
 
 .loading-spinner {

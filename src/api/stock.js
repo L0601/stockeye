@@ -15,7 +15,8 @@ export const MARKET_TYPE = {
 // 股票类型
 export const STOCK_TYPE = {
   STOCK: 'stock',
-  INDEX: 'index'
+  INDEX: 'index',
+  ETF: 'etf'
 }
 
 const ADJUST_TYPE = {
@@ -422,11 +423,13 @@ export async function searchStock(keyword) {
       const parts = item.split('~')
       if (parts.length < 3) continue
 
-      // 判断是否是指数（GP.I 开头）或股票（GP 开头）
+      // 判断是否是指数、ETF 或普通股票
       let itemType = STOCK_TYPE.STOCK
       if (parts[4]) {
         if (parts[4].startsWith('GP.I')) {
           itemType = STOCK_TYPE.INDEX
+        } else if (parts[4] === 'ETF') {
+          itemType = STOCK_TYPE.ETF
         } else if (!parts[4].startsWith('GP')) {
           // 过滤掉衍生品（如窝轮、牛熊证等）
           console.log('过滤掉:', parts[2], parts[4])

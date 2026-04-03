@@ -11,6 +11,9 @@
             <n-tag v-if="stockInfo.market" :type="getMarketTagType(stockInfo.market)" size="small">
               {{ getMarketName(stockInfo.market) }}
             </n-tag>
+            <n-tag v-if="stockInfo.type" :type="getSecurityTagType(stockInfo.type)" size="small">
+              {{ getSecurityTypeName(stockInfo.type) }}
+            </n-tag>
           </n-space>
           <n-space align="center" size="small">
             <n-button class="parser-button" @click="handleGoParser" type="info" round>
@@ -316,6 +319,24 @@ const getMarketTagType = (market) => {
     US: 'success'
   }
   return types[market] || 'default'
+}
+
+const getSecurityTypeName = (type) => {
+  const names = {
+    stock: '股票',
+    index: '指数',
+    etf: 'ETF'
+  }
+  return names[type] || '股票'
+}
+
+const getSecurityTagType = (type) => {
+  const types = {
+    stock: 'default',
+    index: 'warning',
+    etf: 'info'
+  }
+  return types[type] || 'default'
 }
 </script>
 

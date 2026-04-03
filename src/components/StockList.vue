@@ -43,8 +43,8 @@
             <span class="tag" :class="`tag-${stock.market.toLowerCase()}`">
               {{ getMarketText(stock.market) }}
             </span>
-            <span class="tag" :class="stock.type === 'index' ? 'tag-index' : 'tag-stock'">
-              {{ stock.type === 'index' ? '指数' : '股票' }}
+            <span class="tag" :class="getTypeClass(stock.type)">
+              {{ getTypeText(stock.type) }}
             </span>
           </div>
           <div class="status-badge" :class="{ active: stock.status === 'trading' }">
@@ -102,6 +102,18 @@ const getMarketText = (market) => {
     US: '美股'
   }
   return map[market] || market
+}
+
+const getTypeText = (type) => {
+  if (type === 'index') return '指数'
+  if (type === 'etf') return 'ETF'
+  return '股票'
+}
+
+const getTypeClass = (type) => {
+  if (type === 'index') return 'tag-index'
+  if (type === 'etf') return 'tag-etf'
+  return 'tag-stock'
 }
 
 // Bento Grid 布局：不对称卡片大小
@@ -327,6 +339,12 @@ const getCardClass = (index) => {
   background: rgba(100, 116, 139, 0.1);
   color: #475569;
   border-color: rgba(100, 116, 139, 0.2);
+}
+
+.tag-etf {
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+  border-color: rgba(14, 165, 233, 0.2);
 }
 
 .status-badge {
