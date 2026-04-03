@@ -110,8 +110,22 @@
 
             <!-- K线图 -->
             <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="K线图" class="chart-card">
-              <div v-if="klineData.length > 0">
-                <stock-chart :data="klineData" />
+              <div class="chart-toolbar">
+                <n-button-group>
+                  <n-button
+                    v-for="option in klineOptions"
+                    :key="option.value"
+                    :type="activeKlineType === option.value ? 'primary' : 'default'"
+                    ghost
+                    @click="activeKlineType = option.value"
+                  >
+                    {{ option.label }}
+                  </n-button>
+                </n-button-group>
+                <span class="chart-note">{{ activeKlineNote }}</span>
+              </div>
+              <div v-if="displayKlineData.length > 0">
+                <stock-chart :data="displayKlineData" />
               </div>
               <n-empty v-else description="暂无K线数据" />
             </n-card>
@@ -168,13 +182,19 @@ import StockChart from '@/components/StockChart.vue'
 
 const route = useRoute()
 const router = useRouter()
+const klineOptions = [
+  { label: '日K', value: 'daily' },
+  { label: '月K', value: 'monthly' },
+  { label: '季K', value: 'quarterly' },
+  { label: '年K', value: 'yearly' }
+]
 
 const symbol = ref(route.params.symbol)
 const stockInfo = ref({})
 const klineData = ref([])
-const monthlyKlineData = ref([])
 const indicatorMonthlyKlineData = ref([])
 const loading = ref(false)
+const activeKlineType = ref('daily')
 
 const shortTermConfigs = [
   { label: '5日涨跌', hint: '约1周', periods: 5 },
@@ -214,6 +234,26 @@ const longTermIndicators = computed(() =>
   }))
 )
 
+const quarterKlineData = computed(() =>
+  aggregateKline(indicatorMonthlyKlineData.value, 'quarterly')
+)
+
+const yearKlineData = computed(() =>
+  aggregateKline(indicatorMonthlyKlineData.value, 'yearly')
+)
+
+const displayKlineData = computed(() => {
+  if (activeKlineType.value === 'monthly') return indicatorMonthlyKlineData.value
+  if (activeKlineType.value === 'quarterly') return quarterKlineData.value
+  if (activeKlineType.value === 'yearly') return yearKlineData.value
+  return klineData.value
+})
+
+const activeKlineNote = computed(() => {
+  if (activeKlineType.value === 'daily') return '日K按当前日线数据展示'
+  return '月K、季K、年K按后复权口径展示'
+})
+
 onMounted(() => {
   loadData()
 })
@@ -236,13 +276,12 @@ const loadData = async () => {
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
     if (!stock) return
-    const [kline, monthlyKline, indicatorMonthlyKline] = await Promise.all([
+    const [kline, , indicatorMonthlyKline] = await Promise.all([
       getStockKLine(stock.symbol, stock.market),
       getStockKLine(stock.symbol, stock.market, 'monthly'),
       getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq')
     ])
     klineData.value = kline || []
-    monthlyKlineData.value = monthlyKline || []
     indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
   } catch (e) {
     console.error('加载K线失败:', e)
@@ -299,6 +338,45 @@ const formatAmount = (amount) => {
 const formatChange = (value) => {
   if (value == null) return '-'
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+const getPeriodKey = (date, type) => {
+  const [year, month] = String(date).split('-')
+  if (!year || !month) return ''
+  if (type === 'yearly') return year
+  const quarter = Math.floor((Number(month) - 1) / 3) + 1
+  return `${year}-Q${quarter}`
+}
+
+const mergePeriodItem = (current, item, key) => {
+  if (!current) return { ...item, date: key }
+
+  return {
+    date: key,
+    open: current.open,
+    close: item.close,
+    high: Math.max(current.high, item.high),
+    low: Math.min(current.low, item.low),
+    volume: (current.volume || 0) + (item.volume || 0)
+  }
+}
+
+const aggregateKline = (data, type) => {
+  if (!Array.isArray(data) || data.length === 0) return []
+
+  return data.reduce((result, item) => {
+    const key = getPeriodKey(item.date, type)
+    const lastItem = result[result.length - 1]
+    if (!key) return result
+
+    if (!lastItem || lastItem.date !== key) {
+      result.push({ ...item, date: key })
+      return result
+    }
+
+    result[result.length - 1] = mergePeriodItem(lastItem, item, key)
+    return result
+  }, [])
 }
 
 const getMarketName = (market) => {
@@ -573,6 +651,20 @@ const getSecurityTagType = (type) => {
   padding: 10px 0;
 }
 
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.chart-note {
+  font-size: 13px;
+  color: #64748b;
+}
+
 /* 技术指标美化 */
 .indicator-item {
   padding: 24px;
@@ -713,6 +805,10 @@ const getSecurityTagType = (type) => {
 
   .price-value {
     font-size: 40px;
+  }
+
+  .chart-toolbar {
+    align-items: flex-start;
   }
 }
 </style>
