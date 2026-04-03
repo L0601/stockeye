@@ -154,7 +154,7 @@
                   <span class="group-title">长期趋势</span>
                   <span class="group-desc">基于月 K 计算</span>
                 </div>
-                <div class="indicator-note">说明：2年及以上涨幅按后复权口径计算</div>
+                <div class="indicator-note">说明：2年及以上涨幅按后复权口径计算，和图表展示口径分开</div>
                 <div v-if="longTermIndicators.length" class="indicator-grid">
                   <div v-for="item in longTermIndicators" :key="item.label" class="indicator-item">
                     <span class="indicator-label">{{ item.label }}</span>
@@ -192,6 +192,7 @@ const klineOptions = [
 const symbol = ref(route.params.symbol)
 const stockInfo = ref({})
 const klineData = ref([])
+const chartMonthlyKlineData = ref([])
 const indicatorMonthlyKlineData = ref([])
 const quarterlyKlineData = ref([])
 const yearlyKlineData = ref([])
@@ -237,7 +238,7 @@ const longTermIndicators = computed(() =>
 )
 
 const displayKlineData = computed(() => {
-  if (activeKlineType.value === 'monthly') return indicatorMonthlyKlineData.value
+  if (activeKlineType.value === 'monthly') return chartMonthlyKlineData.value
   if (activeKlineType.value === 'quarterly') return quarterlyKlineData.value
   if (activeKlineType.value === 'yearly') return yearlyKlineData.value
   return klineData.value
@@ -280,21 +281,24 @@ const loadData = async () => {
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
     if (!stock) return
-    const [kline, indicatorMonthlyKline, quarterlyKline, yearlyKline] = await Promise.all([
+    const [kline, chartMonthlyKline, indicatorMonthlyKline, quarterlyKline, yearlyKline] = await Promise.all([
       getStockKLine(stock.symbol, stock.market),
       getStockKLine(stock.symbol, stock.market, 'monthly', 'qfq'),
+      getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq'),
       getStockKLine(stock.symbol, stock.market, 'quarterly', 'qfq'),
       getStockKLine(stock.symbol, stock.market, 'yearly', 'qfq')
     ])
-    const monthlyData = indicatorMonthlyKline || []
+    const chartMonthlyData = chartMonthlyKline || []
+    const indicatorMonthlyData = indicatorMonthlyKline || []
     klineData.value = kline || []
-    indicatorMonthlyKlineData.value = monthlyData
+    chartMonthlyKlineData.value = chartMonthlyData
+    indicatorMonthlyKlineData.value = indicatorMonthlyData
     quarterlyKlineData.value = quarterlyKline?.length
       ? quarterlyKline
-      : aggregateKline(monthlyData, 'quarterly')
+      : aggregateKline(chartMonthlyData, 'quarterly')
     yearlyKlineData.value = yearlyKline?.length > 1
       ? yearlyKline
-      : aggregateKline(monthlyData, 'yearly')
+      : aggregateKline(chartMonthlyData, 'yearly')
   } catch (e) {
     console.error('加载K线失败:', e)
   }
