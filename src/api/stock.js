@@ -145,6 +145,12 @@ export function isMarketMiddayBreak(market) {
   return false
 }
 
+function getCNExchangePrefix(symbol) {
+  const code = String(symbol || '').trim()
+  if (/^(5|6|9|11|13)/.test(code)) return 'sh'
+  return 'sz'
+}
+
 // 获取股票实时数据
 export async function getStockQuote(symbol, market, type = STOCK_TYPE.STOCK) {
   try {
@@ -173,7 +179,7 @@ export async function getStockQuote(symbol, market, type = STOCK_TYPE.STOCK) {
 
 // 获取A股实时数据（新浪接口）
 async function getCNStockQuote(symbol) {
-  const prefix = symbol.startsWith('6') ? 'sh' : 'sz'
+  const prefix = getCNExchangePrefix(symbol)
   const url = `/api/sina/list=${prefix}${symbol}`
   const response = await request.get(url)
   const data = response.data
@@ -364,7 +370,7 @@ async function getHKStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QF
 
 // 获取A股K线数据
 async function getCNStockKLine(symbol, period = 'daily', adjust = ADJUST_TYPE.QFQ) {
-  const prefix = symbol.startsWith('6') ? 'sh' : 'sz'
+  const prefix = getCNExchangePrefix(symbol)
   const qqPeriod = period === 'monthly' ? 'month' : 'day'
   const limit = period === 'monthly' ? 320 : 320
   const url = `/api/qq/appstock/app/fqkline/get?param=${prefix}${symbol},${qqPeriod},,,${limit},${adjust}`
