@@ -1,60 +1,69 @@
 <template>
   <n-spin :show="loading">
-    <div class="stock-bento-grid">
+    <div class="stock-groups">
       <div
-        v-for="(stock, index) in sortedStocks"
-        :key="stock.symbol"
-        :class="['stock-card', getCardClass(index)]"
-        @click="() => router.push(`/detail/${stock.symbol}`)"
+        v-for="group in groupedStocks"
+        :key="group.market"
+        class="stock-group"
       >
-        <!-- Card Header -->
-        <div class="card-header">
-          <div class="stock-info">
-            <h3 class="stock-name">{{ stock.name || stock.symbol }}</h3>
-            <span class="stock-symbol">{{ stock.symbol }}</span>
-          </div>
-          <button
-            class="delete-btn"
-            @click.stop="emit('remove', stock.symbol)"
-            title="删除"
+        <div class="group-header">
+          <h3 class="group-title">{{ group.label }}</h3>
+          <span class="group-count">{{ group.stocks.length }} 只</span>
+        </div>
+
+        <div class="stock-bento-grid">
+          <div
+            v-for="(stock, index) in group.stocks"
+            :key="stock.symbol"
+            :class="['stock-card', getCardClass(index)]"
+            @click="() => router.push(`/detail/${stock.symbol}`)"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
+            <div class="card-header">
+              <div class="stock-info">
+                <h3 class="stock-name">{{ stock.name || stock.symbol }}</h3>
+                <span class="stock-symbol">{{ stock.symbol }}</span>
+              </div>
+              <button
+                class="delete-btn"
+                @click.stop="emit('remove', stock.symbol)"
+                title="删除"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
 
-        <!-- Price Display -->
-        <div class="price-display">
-          <div class="current-price" :class="getPriceClass(stock.change)">
-            {{ stock.current ? stock.current.toFixed(2) : '-' }}
-          </div>
-          <div class="price-change" :class="getPriceClass(stock.change)">
-            <span v-if="stock.changePercent">
-              {{ stock.change >= 0 ? '+' : '' }}{{ stock.changePercent }}%
-            </span>
-            <span v-else>-</span>
+            <div class="price-display">
+              <div class="current-price" :class="getPriceClass(stock.change)">
+                {{ stock.current ? stock.current.toFixed(2) : '-' }}
+              </div>
+              <div class="price-change" :class="getPriceClass(stock.change)">
+                <span v-if="stock.changePercent">
+                  {{ stock.change >= 0 ? '+' : '' }}{{ stock.changePercent }}%
+                </span>
+                <span v-else>-</span>
+              </div>
+            </div>
+
+            <div class="card-footer">
+              <div class="tags">
+                <span class="tag" :class="`tag-${stock.market.toLowerCase()}`">
+                  {{ getMarketText(stock.market) }}
+                </span>
+                <span class="tag" :class="getTypeClass(stock.type)">
+                  {{ getTypeText(stock.type) }}
+                </span>
+              </div>
+              <div class="status-badge" :class="{ active: stock.status === 'trading' }">
+                <div class="status-dot"></div>
+                <span>{{ stock.status === 'trading' ? '交易中' : '已闭市' }}</span>
+              </div>
+            </div>
+
+            <div class="card-glow"></div>
           </div>
         </div>
-
-        <!-- Card Footer -->
-        <div class="card-footer">
-          <div class="tags">
-            <span class="tag" :class="`tag-${stock.market.toLowerCase()}`">
-              {{ getMarketText(stock.market) }}
-            </span>
-            <span class="tag" :class="getTypeClass(stock.type)">
-              {{ getTypeText(stock.type) }}
-            </span>
-          </div>
-          <div class="status-badge" :class="{ active: stock.status === 'trading' }">
-            <div class="status-dot"></div>
-            <span>{{ stock.status === 'trading' ? '交易中' : '已闭市' }}</span>
-          </div>
-        </div>
-
-        <!-- Hover Glow Effect -->
-        <div class="card-glow"></div>
       </div>
     </div>
   </n-spin>
@@ -79,8 +88,8 @@ const emit = defineEmits(['remove'])
 const router = useRouter()
 
 // 排序：开盘在前，涨幅高的在前
-const sortedStocks = computed(() => {
-  return [...props.stocks].sort((a, b) => {
+const sortStocks = (stocks) => {
+  return [...stocks].sort((a, b) => {
     if (a.status !== b.status) {
       return a.status === 'trading' ? -1 : 1
     }
@@ -88,6 +97,21 @@ const sortedStocks = computed(() => {
     const bChange = parseFloat(b.changePercent) || 0
     return bChange - aChange
   })
+}
+
+const marketOrder = ['CN', 'HK', 'US']
+
+const groupedStocks = computed(() => {
+  return marketOrder
+    .map((market) => {
+      const stocks = sortStocks(props.stocks.filter(stock => stock.market === market))
+      return {
+        market,
+        label: getMarketText(market),
+        stocks
+      }
+    })
+    .filter(group => group.stocks.length > 0)
 })
 
 const getPriceClass = (change) => {
@@ -124,6 +148,38 @@ const getCardClass = (index) => {
 </script>
 
 <style scoped>
+.stock-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stock-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #18181b;
+}
+
+.group-count {
+  font-size: 13px;
+  color: #71717a;
+  font-weight: 500;
+}
+
 .stock-bento-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -155,6 +211,16 @@ const getCardClass = (index) => {
 
 .card-medium {
   grid-column: span 1;
+}
+
+@media (max-width: 768px) {
+  .stock-groups {
+    gap: 20px;
+  }
+
+  .group-title {
+    font-size: 16px;
+  }
 }
 
 /* Hover Glow Effect */
