@@ -24,6 +24,67 @@ const ADJUST_TYPE = {
   HFQ: 'hfq'
 }
 
+function padDatePart(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatDateParts(year, month, day) {
+  return `${year}-${padDatePart(month)}-${padDatePart(day)}`
+}
+
+function getCNLikeDateKey(date = new Date()) {
+  return formatDateParts(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate()
+  )
+}
+
+function getUSDateKey(date = new Date()) {
+  const offset = isDST(date) ? 12 : 13
+  const usDate = new Date(date.getTime() - offset * 60 * 60 * 1000)
+  return formatDateParts(
+    usDate.getUTCFullYear(),
+    usDate.getUTCMonth() + 1,
+    usDate.getUTCDate()
+  )
+}
+
+function normalizeDateText(text) {
+  return String(text || '').trim().replace(/\//g, '-').replace(/\./g, '-')
+}
+
+function extractDateKey(text, market) {
+  const raw = normalizeDateText(text)
+  if (!raw) return ''
+
+  const ymd = raw.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (ymd) {
+    return formatDateParts(ymd[1], ymd[2], ymd[3])
+  }
+
+  if (market !== MARKET_TYPE.US) return ''
+
+  const mdy = raw.match(/(\d{1,2})-(\d{1,2})-(\d{4})/)
+  if (!mdy) return ''
+  return formatDateParts(mdy[3], mdy[1], mdy[2])
+}
+
+function isQuoteFreshForMarket(market, updateTime) {
+  const quoteDate = extractDateKey(updateTime, market)
+  if (!quoteDate) return true
+
+  const currentDate = market === MARKET_TYPE.US
+    ? getUSDateKey()
+    : getCNLikeDateKey()
+  return quoteDate === currentDate
+}
+
+function resolveQuoteStatus(market, updateTime, inTradingHours) {
+  if (!inTradingHours) return 'closed'
+  return isQuoteFreshForMarket(market, updateTime) ? 'trading' : 'closed'
+}
+
 // 判断是否是美国夏令时（3月第二个周日 - 11月第一个周日）
 function isDST(date) {
   const year = date.getFullYear()
@@ -189,6 +250,8 @@ async function getCNStockQuote(symbol) {
   const arr = data.split('"')[1].split(',')
   if (arr.length < 32) return null
 
+  const updateTime = `${arr[30]} ${arr[31]}`
+
   return {
     symbol,
     name: arr[0],
@@ -201,8 +264,8 @@ async function getCNStockQuote(symbol) {
     amount: parseFloat(arr[9]),
     change: parseFloat(arr[3]) - parseFloat(arr[2]),
     changePercent: ((parseFloat(arr[3]) - parseFloat(arr[2])) / parseFloat(arr[2]) * 100).toFixed(2),
-    status: isCNMarketOpen() ? 'trading' : 'closed',
-    updateTime: `${arr[30]} ${arr[31]}`
+    status: resolveQuoteStatus(MARKET_TYPE.CN, updateTime, isCNMarketOpen()),
+    updateTime
   }
 }
 
@@ -217,6 +280,8 @@ async function getHKStockQuote(symbol) {
   const arr = data.split('"')[1].split(',')
   if (arr.length < 10) return null
 
+  const updateTime = `${arr[17]} ${arr[18]}`
+
   return {
     symbol,
     name: arr[1], // 使用中文名
@@ -229,8 +294,8 @@ async function getHKStockQuote(symbol) {
     amount: parseFloat(arr[11]),
     change: parseFloat(arr[7]),
     changePercent: parseFloat(arr[8]),
-    status: isHKMarketOpen() ? 'trading' : 'closed',
-    updateTime: `${arr[17]} ${arr[18]}`
+    status: resolveQuoteStatus(MARKET_TYPE.HK, updateTime, isHKMarketOpen()),
+    updateTime
   }
 }
 
@@ -252,6 +317,7 @@ async function getHKIndexQuote(symbol) {
 
     const arr = data.split('"')[1].split(',')
     if (arr.length < 10) return null
+    const updateTime = `${arr[17]} ${arr[18]}`
 
     return {
       symbol,
@@ -265,8 +331,8 @@ async function getHKIndexQuote(symbol) {
       amount: 0, // 指数没有成交额
       change: parseFloat(arr[7]),
       changePercent: parseFloat(arr[8]),
-      status: isHKMarketOpen() ? 'trading' : 'closed',
-      updateTime: `${arr[17]} ${arr[18]}`
+      status: resolveQuoteStatus(MARKET_TYPE.HK, updateTime, isHKMarketOpen()),
+      updateTime
     }
   } catch (error) {
     console.error('获取指数数据失败:', error)
@@ -286,6 +352,7 @@ async function getUSStockQuote(symbol) {
 
   const arr = data.split('"')[1].split(',')
   if (arr.length < 10) return null
+  const updateTime = arr[3]
 
   return {
     symbol,
@@ -299,8 +366,8 @@ async function getUSStockQuote(symbol) {
     amount: parseFloat(arr[11]) || 0,
     change: parseFloat(arr[4]),
     changePercent: parseFloat(arr[2]),
-    status: isUSMarketOpen() ? 'trading' : 'closed',
-    updateTime: arr[3]
+    status: resolveQuoteStatus(MARKET_TYPE.US, updateTime, isUSMarketOpen()),
+    updateTime
   }
 }
 
