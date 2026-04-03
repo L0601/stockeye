@@ -44,6 +44,27 @@ const formatChange = (value) => {
   return `${value >= 0 ? '+' : ''}${text}%`
 }
 
+const formatSeriesValue = (value) => {
+  if (value === '-' || value == null) return '-'
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '-'
+}
+
+const getChangeColor = (value) => {
+  if (!Number.isFinite(value)) return '#64748b'
+  return value >= 0 ? '#ef4444' : '#10b981'
+}
+
+const calcBarChange = (point) => {
+  if (!point?.open) return NaN
+  return ((point.close - point.open) / point.open) * 100
+}
+
+const calcBarAmplitude = (point) => {
+  if (!point?.low) return NaN
+  return ((point.high - point.low) / point.low) * 100
+}
+
 const parsePeriodPoint = (value, period) => {
   const text = String(value || '')
   if (period === 'yearly') {
@@ -133,6 +154,13 @@ const updateChart = () => {
         const point = props.data[index]
         const latest = props.data[props.data.length - 1]
         const latestIndex = props.data.length - 1
+        const maLines = params
+          .filter(item => item.seriesType === 'line')
+          .map(item => (
+            `<span style="color:${item.color};font-weight:600;">${item.seriesName} ${formatSeriesValue(item.data)}</span>`
+          ))
+        const barChange = calcBarChange(point)
+        const barAmplitude = calcBarAmplitude(point)
         const change = point?.close
           ? ((latest.close - point.close) / point.close) * 100
           : NaN
@@ -143,11 +171,32 @@ const updateChart = () => {
           Math.max(latestIndex - index, 0)
         )
 
+        const changeColor = getChangeColor(change)
+
         return [
-          `<div>${candle.axisValue}</div>`,
-          `<div>开 ${formatPrice(point?.open)} 收 ${formatPrice(point?.close)}</div>`,
-          `<div>高 ${formatPrice(point?.high)} 低 ${formatPrice(point?.low)}</div>`,
-          `<div>到当前: ${formatChange(change)} / ${rangeText}</div>`
+          '<div style="min-width:220px;">',
+          `<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;">${candle.axisValue}</div>`,
+          '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:12px;color:#334155;">',
+          `<div>开 <span style="font-weight:600;color:#0f172a;">${formatPrice(point?.open)}</span></div>`,
+          `<div>收 <span style="font-weight:600;color:#0f172a;">${formatPrice(point?.close)}</span></div>`,
+          `<div>高 <span style="font-weight:600;color:#0f172a;">${formatPrice(point?.high)}</span></div>`,
+          `<div>低 <span style="font-weight:600;color:#0f172a;">${formatPrice(point?.low)}</span></div>`,
+          `<div>涨幅 <span style="font-weight:600;color:${getChangeColor(barChange)};">${formatChange(barChange)}</span></div>`,
+          `<div>振幅 <span style="font-weight:600;color:#0f172a;">${formatChange(barAmplitude)}</span></div>`,
+          '</div>',
+          `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:12px;">${maLines.join('')}</div>`,
+          '<div style="height:1px;background:rgba(100,116,139,0.18);margin:10px 0;"></div>',
+          '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;">',
+          '<div>',
+          '<div style="font-size:12px;color:#64748b;">到当前</div>',
+          `<div style="font-size:18px;font-weight:700;color:${changeColor};line-height:1.2;">${formatChange(change)}</div>`,
+          '</div>',
+          '<div style="text-align:right;">',
+          '<div style="font-size:12px;color:#64748b;">区间</div>',
+          `<div style="font-size:13px;font-weight:600;color:#0f172a;">${rangeText}</div>`,
+          '</div>',
+          '</div>',
+          '</div>'
         ].join('')
       }
     },
