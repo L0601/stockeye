@@ -125,7 +125,7 @@
                 <span class="chart-note">{{ activeKlineNote }}</span>
               </div>
               <div v-if="displayKlineData.length > 0">
-                <stock-chart :data="displayKlineData" />
+                <stock-chart :data="displayKlineData" :period="activeKlineType" />
               </div>
               <n-empty v-else description="暂无K线数据" />
             </n-card>

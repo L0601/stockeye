@@ -14,7 +14,8 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import * as echarts from 'echarts/dist/echarts.esm.mjs'
 
 const props = defineProps({
-  data: { type: Array, default: () => [] }
+  data: { type: Array, default: () => [] },
+  period: { type: String, default: 'daily' }
 })
 
 const chartRef = ref(null)
@@ -31,6 +32,73 @@ const latestMa = computed(() => ({
   ma10: calcMAValue(10),
   ma20: calcMAValue(20)
 }))
+
+const formatPrice = (value) => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '-'
+}
+
+const formatChange = (value) => {
+  if (!Number.isFinite(value)) return '-'
+  const text = value.toFixed(2)
+  return `${value >= 0 ? '+' : ''}${text}%`
+}
+
+const parsePeriodPoint = (value, period) => {
+  const text = String(value || '')
+  if (period === 'yearly') {
+    const year = Number(text)
+    return Number.isFinite(year) ? { year, month: 1 } : null
+  }
+
+  if (period === 'quarterly') {
+    const match = text.match(/^(\d{4})-Q([1-4])$/)
+    if (!match) return null
+    return {
+      year: Number(match[1]),
+      month: (Number(match[2]) - 1) * 3 + 1
+    }
+  }
+
+  const match = text.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/)
+  if (!match) return null
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3] || 1)
+  }
+}
+
+const formatRangeText = (start, end, period, distance) => {
+  const startPoint = parsePeriodPoint(start, period)
+  const endPoint = parsePeriodPoint(end, period)
+  if (!startPoint || !endPoint) return `${distance}期`
+
+  if (period === 'yearly') {
+    return `${Math.max(endPoint.year - startPoint.year, distance)}年`
+  }
+
+  const monthDiff = (endPoint.year - startPoint.year) * 12 + (endPoint.month - startPoint.month)
+  if (period === 'quarterly') {
+    return `${Math.max(Math.round(monthDiff / 3), distance)}季`
+  }
+
+  if (period === 'monthly') {
+    return `${Math.max(monthDiff, distance)}个月`
+  }
+
+  if (period === 'daily') {
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return `${distance}日`
+    }
+    const dayDiff = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000))
+    return `${Math.max(dayDiff, distance)}天`
+  }
+
+  return `${distance}期`
+}
 
 const initChart = () => {
   if (!chartRef.value) return
@@ -56,7 +124,32 @@ const updateChart = () => {
       borderColor: '#667eea',
       borderWidth: 1,
       textStyle: { color: '#333' },
-      extraCssText: 'box-shadow:0 4px 12px rgba(0,0,0,0.1);border-radius:8px;'
+      extraCssText: 'box-shadow:0 4px 12px rgba(0,0,0,0.1);border-radius:8px;',
+      formatter: (params) => {
+        const candle = params.find(item => item.seriesType === 'candlestick')
+        if (!candle) return ''
+
+        const index = candle.dataIndex
+        const point = props.data[index]
+        const latest = props.data[props.data.length - 1]
+        const latestIndex = props.data.length - 1
+        const change = point?.close
+          ? ((latest.close - point.close) / point.close) * 100
+          : NaN
+        const rangeText = formatRangeText(
+          point?.date,
+          latest?.date,
+          props.period,
+          Math.max(latestIndex - index, 0)
+        )
+
+        return [
+          `<div>${candle.axisValue}</div>`,
+          `<div>开 ${formatPrice(point?.open)} 收 ${formatPrice(point?.close)}</div>`,
+          `<div>高 ${formatPrice(point?.high)} 低 ${formatPrice(point?.low)}</div>`,
+          `<div>到当前: ${formatChange(change)} / ${rangeText}</div>`
+        ].join('')
+      }
     },
     grid: { left: '10%', right: '10%', bottom: '15%', top: '10%' },
     xAxis: {
@@ -126,6 +219,7 @@ const calcMA = (n) =>
 onMounted(() => setTimeout(initChart, 50))
 onUnmounted(() => chartInstance?.dispose())
 watch(() => props.data, updateChart, { deep: true })
+watch(() => props.period, updateChart)
 </script>
 
 <style scoped>
