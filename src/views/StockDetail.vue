@@ -123,7 +123,7 @@
                   <span class="group-title">短期趋势</span>
                   <span class="group-desc">基于日 K 计算</span>
                 </div>
-                <div class="indicator-note">说明：涨幅指标按后复权口径计算</div>
+                <div class="indicator-note">说明：1年及以内涨幅按前复权口径计算</div>
                 <div class="indicator-grid">
                   <div v-for="item in shortTermIndicators" :key="item.label" class="indicator-item">
                     <span class="indicator-label">{{ item.label }}</span>
@@ -140,6 +140,7 @@
                   <span class="group-title">长期趋势</span>
                   <span class="group-desc">基于月 K 计算</span>
                 </div>
+                <div class="indicator-note">说明：2年及以上涨幅按后复权口径计算</div>
                 <div v-if="longTermIndicators.length" class="indicator-grid">
                   <div v-for="item in longTermIndicators" :key="item.label" class="indicator-item">
                     <span class="indicator-label">{{ item.label }}</span>
@@ -172,7 +173,6 @@ const symbol = ref(route.params.symbol)
 const stockInfo = ref({})
 const klineData = ref([])
 const monthlyKlineData = ref([])
-const indicatorKlineData = ref([])
 const indicatorMonthlyKlineData = ref([])
 const loading = ref(false)
 
@@ -203,7 +203,7 @@ const calcChange = (data, periods) => {
 const shortTermIndicators = computed(() =>
   shortTermConfigs.map(item => ({
     ...item,
-    value: calcChange(indicatorKlineData.value, item.periods)
+    value: calcChange(klineData.value, item.periods)
   }))
 )
 
@@ -236,15 +236,13 @@ const loadData = async () => {
     const stocks = storage.getStocks()
     const stock = stocks.find(s => s.symbol === symbol.value)
     if (!stock) return
-    const [kline, monthlyKline, indicatorKline, indicatorMonthlyKline] = await Promise.all([
+    const [kline, monthlyKline, indicatorMonthlyKline] = await Promise.all([
       getStockKLine(stock.symbol, stock.market),
       getStockKLine(stock.symbol, stock.market, 'monthly'),
-      getStockKLine(stock.symbol, stock.market, 'daily', 'hfq'),
       getStockKLine(stock.symbol, stock.market, 'monthly', 'hfq')
     ])
     klineData.value = kline || []
     monthlyKlineData.value = monthlyKline || []
-    indicatorKlineData.value = indicatorKline || []
     indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
   } catch (e) {
     console.error('加载K线失败:', e)

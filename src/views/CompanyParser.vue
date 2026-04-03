@@ -147,7 +147,7 @@
             <div class="section-header">
               <span>技术走势</span>
             </div>
-            <div class="section-note">说明：涨幅指标按后复权口径计算</div>
+            <div class="section-note">说明：1年及以内涨幅按前复权口径计算，2年及以上涨幅按后复权口径计算</div>
             <div class="section-grid">
               <div
                 v-for="item in technicalChanges"
@@ -262,7 +262,6 @@ const result = ref(null)
 const financeData = ref(null)
 const klineData = ref([])
 const monthlyKlineData = ref([])
-const indicatorKlineData = ref([])
 const indicatorMonthlyKlineData = ref([])
 const visibleSeries = ref({
   revenue: true,
@@ -389,7 +388,7 @@ const filteredFinanceData = computed(() => {
 })
 
 const technicalChanges = computed(() => {
-  const data = indicatorKlineData.value
+  const data = klineData.value
   if (!data || data.length < 2) return null
   return [
     { label: '5日涨跌', value: calcSeriesChange(data, 5) },
@@ -729,7 +728,6 @@ const handleFetch = async () => {
   financeData.value = null
   klineData.value = []
   monthlyKlineData.value = []
-  indicatorKlineData.value = []
   indicatorMonthlyKlineData.value = []
   visibleSeries.value = {
     revenue: true,
@@ -744,17 +742,15 @@ const handleFetch = async () => {
 
   loading.value = true
   try {
-    const [metrics, financeHtml, kline, monthlyKline, indicatorKline, indicatorMonthlyKline] = await Promise.all([
+    const [metrics, financeHtml, kline, monthlyKline, indicatorMonthlyKline] = await Promise.all([
       getCompanyMetrics(symbol.value, market.value),
       getFinancePage(symbol.value, market.value),
       getStockKLine(symbol.value, market.value),
       getStockKLine(symbol.value, market.value, 'monthly'),
-      getStockKLine(symbol.value, market.value, 'daily', 'hfq'),
       getStockKLine(symbol.value, market.value, 'monthly', 'hfq')
     ])
     klineData.value = kline || []
     monthlyKlineData.value = monthlyKline || []
-    indicatorKlineData.value = indicatorKline || []
     indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
     if (financeHtml) {
       financeData.value = parseFinanceHtml(financeHtml)
