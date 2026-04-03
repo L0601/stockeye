@@ -111,17 +111,37 @@
             <!-- K线图 -->
             <n-card v-if="stockInfo.market === 'CN' || stockInfo.market === 'HK' || stockInfo.market === 'US'" title="K线图" class="chart-card">
               <div class="chart-toolbar">
-                <n-button-group>
-                  <n-button
-                    v-for="option in klineOptions"
-                    :key="option.value"
-                    :type="activeKlineType === option.value ? 'primary' : 'default'"
-                    ghost
-                    @click="activeKlineType = option.value"
-                  >
-                    {{ option.label }}
-                  </n-button>
-                </n-button-group>
+                <div class="chart-actions">
+                  <n-button-group>
+                    <n-button
+                      v-for="option in klineOptions"
+                      :key="option.value"
+                      :type="activeKlineType === option.value ? 'primary' : 'default'"
+                      ghost
+                      @click="activeKlineType = option.value"
+                    >
+                      {{ option.label }}
+                    </n-button>
+                  </n-button-group>
+                  <n-popover trigger="click" placement="bottom-end">
+                    <template #trigger>
+                      <n-button class="stats-trigger" quaternary size="small">
+                        统计
+                      </n-button>
+                    </template>
+                    <div class="stats-popover">
+                      <div class="stats-title">{{ currentPeriodLabel }}统计</div>
+                      <table class="stats-table">
+                        <tbody>
+                          <tr v-for="item in chartStats" :key="item.label">
+                            <th>{{ item.label }}</th>
+                            <td :class="item.tone">{{ item.value }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </n-popover>
+                </div>
                 <span class="chart-note">{{ activeKlineNote }}</span>
               </div>
               <div v-if="displayKlineData.length > 0">
@@ -244,6 +264,16 @@ const displayKlineData = computed(() => {
   return klineData.value
 })
 
+const currentPeriodLabel = computed(() => {
+  const map = {
+    daily: '日K',
+    monthly: '月K',
+    quarterly: '季K',
+    yearly: '年K'
+  }
+  return map[activeKlineType.value] || 'K线'
+})
+
 const chartAdjustMode = computed(() =>
   stockInfo.value.market === 'US' ? '原始价格' : '前复权'
 )
@@ -356,6 +386,21 @@ const formatChange = (value) => {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
+const formatPercentText = (value) => {
+  if (!Number.isFinite(value)) return '-'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+const calcBarChange = (item) => {
+  if (!item?.open) return NaN
+  return ((item.close - item.open) / item.open) * 100
+}
+
+const calcBarAmplitude = (item) => {
+  if (!item?.low) return NaN
+  return ((item.high - item.low) / item.low) * 100
+}
+
 const getPeriodKey = (date, type) => {
   const [year, month] = String(date).split('-')
   if (!year || !month) return ''
@@ -394,6 +439,40 @@ const aggregateKline = (data, type) => {
     return result
   }, [])
 }
+
+const chartStats = computed(() => {
+  const data = displayKlineData.value
+  if (!data.length) {
+    return [
+      { label: '总数', value: '0' }
+    ]
+  }
+
+  const changes = data.map(calcBarChange).filter(Number.isFinite)
+  const amplitudes = data.map(calcBarAmplitude).filter(Number.isFinite)
+  const upCount = changes.filter(value => value > 0).length
+  const avgChange = changes.length
+    ? changes.reduce((sum, value) => sum + value, 0) / changes.length
+    : NaN
+  const avgAmplitude = amplitudes.length
+    ? amplitudes.reduce((sum, value) => sum + value, 0) / amplitudes.length
+    : NaN
+  const maxRise = changes.length ? Math.max(...changes) : NaN
+  const maxFall = changes.length ? Math.min(...changes) : NaN
+  const maxAmplitude = amplitudes.length ? Math.max(...amplitudes) : NaN
+  const unit = currentPeriodLabel.value.replace('K', '')
+
+  return [
+    { label: `总${unit}数`, value: String(data.length), tone: '' },
+    { label: `上涨${unit}数`, value: String(upCount), tone: 'tone-up' },
+    { label: '上涨占比', value: `${((upCount / data.length) * 100).toFixed(2)}%`, tone: 'tone-up' },
+    { label: '平均涨幅', value: formatPercentText(avgChange), tone: avgChange >= 0 ? 'tone-up' : 'tone-down' },
+    { label: '平均振幅', value: formatPercentText(avgAmplitude), tone: '' },
+    { label: '最大涨幅', value: formatPercentText(maxRise), tone: 'tone-up' },
+    { label: '最大跌幅', value: formatPercentText(maxFall), tone: 'tone-down' },
+    { label: '最大振幅', value: formatPercentText(maxAmplitude), tone: '' }
+  ]
+})
 
 const getMarketName = (market) => {
   const names = {
@@ -676,9 +755,79 @@ const getSecurityTagType = (type) => {
   flex-wrap: wrap;
 }
 
+.chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stats-trigger {
+  border-radius: 999px !important;
+  border: 1px solid rgba(99, 102, 241, 0.18) !important;
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: #4f46e5 !important;
+  font-weight: 600 !important;
+  padding: 0 14px !important;
+}
+
+.stats-trigger:hover {
+  background: rgba(99, 102, 241, 0.14) !important;
+  border-color: rgba(99, 102, 241, 0.28) !important;
+  color: #4338ca !important;
+}
+
 .chart-note {
   font-size: 13px;
   color: #64748b;
+}
+
+.stats-popover {
+  min-width: 240px;
+}
+
+.stats-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.stats-table th {
+  text-align: left;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stats-table td {
+  text-align: right;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.stats-table td.tone-up {
+  color: #dc2626;
+}
+
+.stats-table td.tone-down {
+  color: #059669;
+}
+
+.stats-table tr:last-child th,
+.stats-table tr:last-child td {
+  border-bottom: none;
 }
 
 /* 技术指标美化 */
