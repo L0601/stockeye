@@ -12,7 +12,14 @@
           <h1>{{ result && result.name ? result.name + ' 指标解析' : '公司指标解析' }}</h1>
           <div class="delay-note">提醒：页面数据约有 30 分钟延迟</div>
         </div>
-        <div class="header-spacer"></div>
+        <button class="action-btn ghost ai-settings-btn" @click="showAiSettings = true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-2.92.66 2 2 0 11-3.96 0 1.65 1.65 0 00-2.92-.66 2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a2 2 0 110-3.96 1.65 1.65 0 00-.66-2.92l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 002.92-.66 2 2 0 113.96 0 1.65 1.65 0 002.92.66l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a2 2 0 110 3.96z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>AI 设置</span>
+          <span v-if="aiModel" class="ai-model-tag">{{ aiModel }}</span>
+        </button>
       </div>
     </header>
 
@@ -41,6 +48,7 @@
         <div v-if="error" class="error">{{ error }}</div>
       </section>
 
+      <div v-if="result" class="workspace">
       <section class="panel result-panel">
         <div class="panel-header">
           <h2>解析结果</h2>
@@ -240,16 +248,52 @@
           <pre class="copy-text">{{ displayText }}</pre>
         </div>
       </section>
+
+      <section class="panel ai-panel">
+        <div class="panel-header">
+          <h2>AI 分析</h2>
+          <button
+            v-if="aiConfigured"
+            class="action-btn ghost"
+            :disabled="aiLoading"
+            @click="runAiAnalysis"
+          >
+            {{ aiLoading ? '分析中...' : '重新分析' }}
+          </button>
+        </div>
+
+        <div class="ai-body">
+          <div v-if="!aiConfigured" class="ai-hint">
+            未配置 AI 模型，<button class="link-btn" @click="showAiSettings = true">点此配置</button> 后即可自动分析。
+          </div>
+          <template v-else>
+            <div v-if="aiError" class="error">{{ aiError }}</div>
+            <div v-if="aiAnalysis" class="ai-content markdown-body" v-html="aiAnalysisHtml"></div>
+            <div v-else-if="aiLoading" class="ai-loading">
+              <span class="ai-dot"></span>正在分析，请稍候…
+            </div>
+            <div v-else class="ai-hint">解析完成，等待 AI 分析…</div>
+          </template>
+        </div>
+      </section>
+      </div>
     </main>
+
+    <AiSettingsModal v-model:show="showAiSettings" @saved="handleAiSaved" />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, MARKET_TYPE } from '@/api/stock'
+import { marked } from 'marked'
+import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, isMarketOpen, MARKET_TYPE } from '@/api/stock'
+import { streamChatCompletion } from '@/api/ai'
+import { buildAnalysisMessages } from '@/utils/aiPrompt'
+import { aiSettings } from '@/utils/storage'
 import FinanceChart from '@/components/FinanceChart.vue'
+import AiSettingsModal from '@/components/AiSettingsModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -775,6 +819,7 @@ const handleFetch = async () => {
       }
 
       result.value = normalizeMetrics({ ...metrics, industry })
+      autoAnalyze()
       return
     }
 
@@ -796,6 +841,7 @@ const handleFetch = async () => {
       return
     }
     result.value = normalizeMetrics(parsed)
+    autoAnalyze()
   } catch (err) {
     console.error(err)
     error.value = '解析失败，请稍后重试'
@@ -811,6 +857,80 @@ onMounted(() => {
     handleFetch()
   }
 })
+
+// ===== AI 大模型分析 =====
+const showAiSettings = ref(false)
+const aiAnalysis = ref('')
+const aiLoading = ref(false)
+const aiError = ref('')
+const aiConfigured = ref(aiSettings.isValid())
+const aiModel = ref(aiSettings.getConfig().model)
+let aiController = null
+
+// 流式文本按 Markdown 渲染，便于展示分段结论
+const aiAnalysisHtml = computed(() => (aiAnalysis.value ? marked.parse(aiAnalysis.value) : ''))
+
+// 调用模型分析：复用 displayText 作为数据源，流式写入 aiAnalysis
+const runAiAnalysis = async () => {
+  aiConfigured.value = aiSettings.isValid()
+  if (!aiConfigured.value || !displayText.value) return
+
+  // 取消上一次未完成的请求（切换股票/手动重试时）
+  if (aiController) aiController.abort()
+  aiController = new AbortController()
+  aiAnalysis.value = ''
+  aiError.value = ''
+  aiLoading.value = true
+
+  // 盘中时 K 线最后一根为实时价而非收盘价，需告知模型避免误判
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const messages = buildAnalysisMessages(displayText.value, {
+    name: result.value?.name,
+    marketOpen: isMarketOpen(market.value),
+    dateStr
+  })
+  try {
+    await streamChatCompletion(aiSettings.getConfig(), messages, {
+      onDelta: (delta) => { aiAnalysis.value += delta },
+      signal: aiController.signal
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') return
+    console.error(err)
+    aiError.value = 'AI 分析失败，请检查模型配置或稍后重试'
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+// 中止并清空当前 AI 分析（解析开始或结果清空时调用）
+const resetAiAnalysis = () => {
+  if (aiController) aiController.abort()
+  aiController = null
+  aiAnalysis.value = ''
+  aiError.value = ''
+  aiLoading.value = false
+}
+
+// 解析成功后由 handleFetch 显式调用，确保手动/跳转自动解析都触发；
+// 用 nextTick 等 displayText 等计算属性结算后再读取
+const autoAnalyze = () => {
+  aiConfigured.value = aiSettings.isValid()
+  nextTick(() => runAiAnalysis())
+}
+
+// 结果被清空（重新解析开始）时中止并重置 AI 区
+watch(result, (val) => {
+  if (!val) resetAiAnalysis()
+})
+
+// 保存配置后刷新模型名展示；若已有解析结果则立即重新分析
+const handleAiSaved = () => {
+  aiConfigured.value = aiSettings.isValid()
+  aiModel.value = aiSettings.getConfig().model
+  if (result.value) runAiAnalysis()
+}
 
 const toggleSeries = (key) => {
   const current = visibleSeries.value
@@ -924,13 +1044,52 @@ const handleCopy = async () => {
 }
 
 .main-content {
-  max-width: 1200px;
+  max-width: min(1760px, 94vw);
   margin: 0 auto;
   padding: 40px 32px 80px;
   position: relative;
   z-index: 2;
   display: grid;
   gap: 24px;
+}
+
+/* 解析结果（左）与 AI 分析（右）稳定两列工作区
+ * - minmax(0, …)：两列都能收缩到内容以下，避免内部网格/图表撑开溢出
+ * - 左列随页面正常滚动；右列 sticky 固定 + 内部独立滚动
+ * - AI 流式内容增长只在面板内部滚动，不会撑动整页、不再错位 */
+.workspace {
+  display: grid;
+  /* 左列吃掉富余宽度，右侧 AI 控制在舒适阅读宽度（约 40-50 字/行） */
+  grid-template-columns: minmax(0, 1fr) clamp(440px, 30vw, 540px);
+  gap: 24px;
+  align-items: start;
+}
+
+.workspace .result-panel {
+  min-width: 0;
+}
+
+.workspace .ai-panel {
+  min-width: 0;
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-panel .panel-header {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+
+.ai-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .panel {
@@ -1061,6 +1220,7 @@ input:focus {
 
 .result-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -1079,6 +1239,7 @@ input:focus {
 .result-sections {
   display: grid;
   gap: 20px;
+  min-width: 0;
 }
 
 .section {
@@ -1088,6 +1249,7 @@ input:focus {
   padding: 18px;
   display: grid;
   gap: 16px;
+  min-width: 0;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
 }
 
@@ -1157,8 +1319,9 @@ input:focus {
 
 .section-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 18px;
+  min-width: 0;
 }
 
 .section-note {
@@ -1405,5 +1568,120 @@ input:focus {
   .metric.wide {
     grid-column: span 1;
   }
+}
+
+/* 窄屏：两列改为上下堆叠，AI 面板取消吸附 */
+/* 窄屏：两列改为上下堆叠，AI 面板取消吸附与高度限制、随页面滚动 */
+@media (max-width: 1024px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace .ai-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .ai-body {
+    overflow: visible;
+  }
+}
+
+/* AI 设置按钮上的已配置模型名标签 */
+.ai-model-tag {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-hint {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.ai-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.ai-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+  animation: ai-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.ai-content {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  padding: 18px 20px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1f2937;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* AI 输出的 Markdown 渲染样式 */
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3) {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 16px;
+}
+
+.markdown-body :deep(p) {
+  margin: 8px 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.markdown-body :deep(li) {
+  margin: 4px 0;
+}
+
+.markdown-body :deep(strong) {
+  color: #0f172a;
+}
+
+.markdown-body :deep(code) {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 1px 5px;
+  border-radius: 6px;
 }
 </style>

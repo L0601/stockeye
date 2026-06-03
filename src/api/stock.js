@@ -206,6 +206,14 @@ export function isMarketMiddayBreak(market) {
   return false
 }
 
+// 是否处于交易时段（盘中）。盘中时 K 线最后一根为实时价，并非最终收盘价
+export function isMarketOpen(market) {
+  if (market === MARKET_TYPE.CN) return isCNMarketOpen()
+  if (market === MARKET_TYPE.HK) return isHKMarketOpen()
+  if (market === MARKET_TYPE.US) return isUSMarketOpen()
+  return false
+}
+
 function getCNExchangePrefix(symbol) {
   const code = String(symbol || '').trim()
   if (/^(5|6|9|11|13)/.test(code)) return 'sh'

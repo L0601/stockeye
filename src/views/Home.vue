@@ -126,8 +126,17 @@
             <span class="setting-hint">午间闭市不隐藏</span>
           </div>
         </n-form-item>
+
+        <n-form-item label="AI 模型">
+          <div class="setting-toggle">
+            <n-button size="small" @click="showAiSettings = true">配置</n-button>
+            <span class="setting-hint">用于股票解析页的智能分析</span>
+          </div>
+        </n-form-item>
       </n-space>
     </n-modal>
+
+    <AiSettingsModal v-model:show="showAiSettings" />
   </div>
 </template>
 
@@ -138,6 +147,7 @@ import { useStockStore } from '@/stores/stock'
 import { useDialog, useMessage } from 'naive-ui'
 import StockSearch from '@/components/StockSearch.vue'
 import StockList from '@/components/StockList.vue'
+import AiSettingsModal from '@/components/AiSettingsModal.vue'
 
 const stockStore = useStockStore()
 const dialog = useDialog()
@@ -145,6 +155,7 @@ const message = useMessage()
 const router = useRouter()
 
 const showSettings = ref(false)
+const showAiSettings = ref(false)
 let refreshTimer = null
 
 const intervalOptions = [
