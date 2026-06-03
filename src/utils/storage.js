@@ -84,3 +84,29 @@ export const listSettings = {
     localStorage.setItem(HIDE_CLOSED_KEY, enabled.toString())
   }
 }
+
+// AI 大模型配置（兼容 OpenAI 接口）
+const AI_CONFIG_KEY = 'stock_eye_ai_config'
+
+export const aiSettings = {
+  // 读取配置，缺省字段补空串，避免上层判空繁琐
+  getConfig() {
+    const raw = localStorage.getItem(AI_CONFIG_KEY)
+    const data = raw ? JSON.parse(raw) : {}
+    return {
+      apiKey: data.apiKey || '',
+      baseUrl: data.baseUrl || '',
+      model: data.model || ''
+    }
+  },
+
+  setConfig({ apiKey = '', baseUrl = '', model = '' }) {
+    localStorage.setItem(AI_CONFIG_KEY, JSON.stringify({ apiKey, baseUrl, model }))
+  },
+
+  // baseUrl 与 model 均非空才算有效（apiKey 可空，对应无需鉴权的服务）
+  isValid() {
+    const { baseUrl, model } = this.getConfig()
+    return Boolean(baseUrl.trim()) && Boolean(model.trim())
+  }
+}
