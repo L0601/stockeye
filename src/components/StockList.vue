@@ -201,7 +201,7 @@ const getCardClass = (index) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Bento Grid Variations */
@@ -260,7 +260,7 @@ const getCardClass = (index) => {
   background: rgba(255, 255, 255, 0.95);
   border-color: rgba(0, 0, 0, 0.12);
   transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-lg);
 }
 
 .stock-card:active {

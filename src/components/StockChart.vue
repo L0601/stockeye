@@ -145,7 +145,7 @@ const updateChart = () => {
       borderColor: '#667eea',
       borderWidth: 1,
       textStyle: { color: '#333' },
-      extraCssText: 'box-shadow:0 4px 12px rgba(0,0,0,0.1);border-radius:8px;',
+      extraCssText: 'box-shadow:var(--shadow-md);border-radius:8px;',
       formatter: (params) => {
         const candle = params.find(item => item.seriesType === 'candlestick')
         if (!candle) return ''

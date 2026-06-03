@@ -1097,7 +1097,7 @@ const handleCopy = async () => {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 24px;
   padding: 28px;
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-lg);
 }
 
 .input-row {
@@ -1204,7 +1204,7 @@ input:focus {
 .action-btn.solid {
   background: #0f172a;
   color: #f8fafc;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--shadow-xl);
 }
 
 .action-btn:hover {
@@ -1250,7 +1250,7 @@ input:focus {
   display: grid;
   gap: 16px;
   min-width: 0;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-lg);
 }
 
 .section-overview {
@@ -1344,7 +1344,7 @@ input:focus {
   gap: 8px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-lg);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1360,7 +1360,7 @@ input:focus {
 
 .metric:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--shadow-xl);
 }
 
 .metric.wide {
@@ -1458,7 +1458,7 @@ input:focus {
   padding: 20px;
   display: grid;
   gap: 14px;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-lg);
 }
 
 .line-card {
@@ -1645,7 +1645,7 @@ input:focus {
   font-size: 14px;
   line-height: 1.75;
   color: #1f2937;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-lg);
 }
 
 /* AI 输出的 Markdown 渲染样式 */

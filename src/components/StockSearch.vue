@@ -177,8 +177,8 @@ const getMarketName = (market) => {
 
 .search-input:focus {
   background: #fff;
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
 }
 
 .clear-btn {
@@ -332,8 +332,8 @@ const getMarketName = (market) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.3);
   border-radius: 12px;
   color: #818cf8;
   cursor: pointer;
@@ -342,8 +342,8 @@ const getMarketName = (market) => {
 }
 
 .add-btn:hover {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(37, 99, 235, 0.2);
+  border-color: rgba(37, 99, 235, 0.5);
   color: #a5b4fc;
   transform: scale(1.08);
 }

@@ -156,7 +156,7 @@ watch(() => [props.periods, props.revenue, props.profit, props.margin, props.vis
   padding: 6px 10px;
   font-size: 12px;
   line-height: 1.7;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
   white-space: nowrap;
   z-index: 10;
 }

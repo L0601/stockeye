@@ -638,7 +638,7 @@ const getSecurityTagType = (type) => {
 /* 卡片美化 */
 :deep(.n-card) {
   border-radius: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
@@ -650,7 +650,7 @@ const getSecurityTagType = (type) => {
   background: rgba(255, 255, 255, 0.9);
   border-color: rgba(0, 0, 0, 0.12);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-lg);
 }
 
 :deep(.n-card-header) {
@@ -843,7 +843,7 @@ const getSecurityTagType = (type) => {
 .indicator-item:hover {
   transform: translateY(-2px);
   background: rgba(0, 0, 0, 0.04);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .indicator-group {
