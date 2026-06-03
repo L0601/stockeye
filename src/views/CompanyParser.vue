@@ -978,7 +978,9 @@ const handleCopy = async () => {
   min-height: 100vh;
   background: #f6f6f4;
   position: relative;
-  overflow-x: hidden;
+  /* 用 clip 而非 hidden：同样裁掉横向溢出，但不创建滚动容器，
+     从而不破坏右侧 AI 面板的 position: sticky 吸顶 */
+  overflow-x: clip;
 }
 
 .company-container::before {
