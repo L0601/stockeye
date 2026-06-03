@@ -23,12 +23,41 @@ async function fetchWithRedirects(url, headers, depth = 0) {
   return res
 }
 
+// AI 透传代理：目标地址由 x-ai-target 头给出（baseUrl 用户任意填，不能用固定映射）
+// 转发 method/body/Authorization 并流式回传，解决浏览器直连大模型端点的跨域问题
+async function handleAiProxy(req) {
+  const target = req.headers.get('x-ai-target')
+  if (!target || !/^https?:\/\//i.test(target)) {
+    return new Response('Missing or invalid x-ai-target', { status: 400 })
+  }
+  const headers = {}
+  const auth = req.headers.get('authorization')
+  if (auth) headers['Authorization'] = auth
+  const init = { method: req.method, headers }
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    headers['Content-Type'] = req.headers.get('content-type') || 'application/json'
+    init.body = await req.text()
+  }
+  try {
+    const upstream = await fetch(target, init)
+    const resHeaders = new Headers()
+    const ct = upstream.headers.get('content-type')
+    if (ct) resHeaders.set('Content-Type', ct)
+    resHeaders.set('Cache-Control', 'no-store')
+    return new Response(upstream.body, { status: upstream.status, headers: resHeaders })
+  } catch (err) {
+    return new Response(`AI proxy error: ${err.message}`, { status: 502 })
+  }
+}
+
 export default async function handler(req) {
   const { pathname, search } = new URL(req.url)
   const segments = pathname.replace(/^\/api\//, '').split('/').filter(Boolean)
   const service = segments[0]
-  const proxyConfig = PROXY_MAP[service]
 
+  if (service === 'ai-proxy') return handleAiProxy(req)
+
+  const proxyConfig = PROXY_MAP[service]
   if (!proxyConfig) return new Response('Unknown service', { status: 404 })
 
   const restPath = segments.slice(1).join('/') + (pathname.endsWith('/') ? '/' : '')

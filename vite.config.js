@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'url'
 import http from 'http'
 import https from 'https'
+import { Readable } from 'node:stream'
 
 const fetchWithRedirects = (url, headers, depth = 0) => new Promise((resolve, reject) => {
   const client = url.startsWith('https') ? https : http
@@ -74,6 +75,55 @@ const basicHtmlProxyPlugin = () => ({
   },
   configurePreviewServer(server) {
     attachBasicHtmlProxy(server)
+  }
+})
+
+// 读取请求体（用于转发 POST /chat/completions）
+const readReqBody = (req) => new Promise((resolve) => {
+  const chunks = []
+  req.on('data', (chunk) => chunks.push(chunk))
+  req.on('end', () => resolve(chunks.length ? Buffer.concat(chunks) : undefined))
+})
+
+// AI 透传代理：目标地址由 x-ai-target 头给出，转发 method/body/Authorization 并流式回传
+// 解决浏览器直连大模型端点的跨域问题；目标任意，故不能用固定映射
+const attachAiProxy = (server) => {
+  server.middlewares.use('/api/ai-proxy', async (req, res) => {
+    const target = req.headers['x-ai-target']
+    if (!target || !/^https?:\/\//i.test(target)) {
+      res.statusCode = 400
+      res.end('Missing or invalid x-ai-target')
+      return
+    }
+    try {
+      const headers = {}
+      if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization']
+      let body
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+        body = await readReqBody(req)
+      }
+      const upstream = await fetch(target, { method: req.method, headers, body })
+      res.statusCode = upstream.status
+      const ct = upstream.headers.get('content-type')
+      if (ct) res.setHeader('Content-Type', ct)
+      res.setHeader('Cache-Control', 'no-store')
+      if (upstream.body) Readable.fromWeb(upstream.body).pipe(res)
+      else res.end()
+    } catch (err) {
+      res.statusCode = 502
+      res.end(`AI proxy error: ${err.message}`)
+    }
+  })
+}
+
+const aiProxyPlugin = () => ({
+  name: 'ai-proxy',
+  configureServer(server) {
+    attachAiProxy(server)
+  },
+  configurePreviewServer(server) {
+    attachAiProxy(server)
   }
 })
 
@@ -155,7 +205,7 @@ const proxyConfig = {
 }
 
 export default defineConfig({
-  plugins: [vue(), basicHtmlProxyPlugin()],
+  plugins: [vue(), basicHtmlProxyPlugin(), aiProxyPlugin()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

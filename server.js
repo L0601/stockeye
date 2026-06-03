@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import http from 'node:http'
 import https from 'node:https'
 import { URL } from 'node:url'
+import { Readable } from 'node:stream'
 
 // 获取当前文件的目录路径（ES Module环境）
 const __filename = fileURLToPath(import.meta.url)
@@ -139,6 +140,34 @@ app.get('/api/ths-basic-html/*', async (req, res) => {
     res.status(result.status || 200).send(result.body)
   } catch (error) {
     res.status(502).send('Proxy failed')
+  }
+})
+
+// AI 透传代理：目标地址由 x-ai-target 头给出（baseUrl 用户任意填，不能用固定映射）
+// 转发 method/body/Authorization 并流式回传，解决浏览器直连大模型端点的跨域问题
+app.all('/api/ai-proxy', express.raw({ type: '*/*', limit: '5mb' }), async (req, res) => {
+  const target = req.headers['x-ai-target']
+  if (!target || !/^https?:\/\//i.test(target)) {
+    res.status(400).send('Missing or invalid x-ai-target')
+    return
+  }
+  try {
+    const headers = {}
+    if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization']
+    let body
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+      body = req.body && req.body.length ? req.body : undefined
+    }
+    const upstream = await fetch(target, { method: req.method, headers, body })
+    res.status(upstream.status)
+    const ct = upstream.headers.get('content-type')
+    if (ct) res.set('Content-Type', ct)
+    res.set('Cache-Control', 'no-store')
+    if (upstream.body) Readable.fromWeb(upstream.body).pipe(res)
+    else res.end()
+  } catch (err) {
+    res.status(502).send(`AI proxy error: ${err.message}`)
   }
 })
 
