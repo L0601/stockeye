@@ -22,6 +22,10 @@
 | `/api/ths-basic/*` | `https://basic.10jqka.com.cn/*` | 财务页 iframe 内容 |
 | `/api/ths-basic-html/*` | `https://basic.10jqka.com.cn/*` | 处理重定向后的财务 HTML |
 | `/api/yahoo/*` | `https://query1.finance.yahoo.com/*` | 美股日线 / 月线 |
+| `/api/eastmoney/*` | `https://datacenter-web.eastmoney.com/*` | A 股历史每日估值（PE-TTM / PB），用于 PE 历史分位 |
+| `/api/ai-proxy` | 由请求头 `x-ai-target` 指定 | AI 大模型透传代理（转发 method/body/Authorization，流式回传） |
+
+> 代理统一约定：浏览器只请求同源 `/api/*`，由代理转发到上游，规避第三方接口缺少 CORS 头的问题。新增数据源时在四套环境（`vite.config.js` dev、`functions/api/[[path]].js` Cloudflare、`api/[...path].js` Vercel、`server.js` 自托管）各加一条映射即可。
 
 代理配置见：
 
@@ -61,7 +65,7 @@
 
 ### 2.3 公司解析页 `CompanyParser`
 
-来源：并发请求 5 组数据：
+来源：并发请求 6 组数据：
 
 ```js
 getCompanyMetrics(symbol, market)
@@ -69,6 +73,7 @@ getFinancePage(symbol, market)
 getStockKLine(symbol, market)
 getStockKLine(symbol, market, 'monthly')
 getStockKLine(symbol, market, 'monthly', 'hfq')
+getValuationHistory(symbol, market)   // 仅 A 股，历史 PE-TTM，用于算 PE 分位
 ```
 
 必要时还会补一次：
@@ -617,6 +622,82 @@ quotebridge_v6_realhead_{prefix}_{symbol}_last({
 | `changePercent` | 百分比，保留 2 位 |
 | `pe/pb/peStatic` | 最多保留 3 位小数 |
 
+## 8A. 东方财富历史估值接口（PE 历史分位）
+
+项目方法：`getValuationHistory(symbol, market)`（`src/api/stock.js`）
+
+提供 A 股**每日历史估值序列**（PE-TTM / PB 等），用于计算"当前 PE 在近 1/3/5/10 年的历史分位"。**仅 A 股**有该数据源，港股 / 美股返回 `null`。
+
+- 项目地址：`/api/eastmoney/api/data/v1/get`
+- 真实地址：`https://datacenter-web.eastmoney.com/api/data/v1/get`
+- 方法：`GET`
+
+### 8A.1 入参（query）
+
+| 参数 | 取值 | 说明 |
+| --- | --- | --- |
+| `reportName` | `RPT_VALUEANALYSIS_DET` | 个股估值明细报表（固定） |
+| `columns` | `ALL` | 返回全部列 |
+| `sortColumns` | `TRADE_DATE` | 按交易日排序 |
+| `sortTypes` | `-1` | 倒序（最新在前） |
+| `pageSize` | `5000` | 单页条数；项目取 5000 以覆盖约 10~20 年 |
+| `filter` | `(SECUCODE="600519.SH")` | 个股过滤，需 URL 编码；SECUCODE 见下 |
+
+#### SECUCODE 规则（A 股代码 + 交易所后缀）
+
+| 输入 | SECUCODE |
+| --- | --- |
+| `600519` | `600519.SH` |
+| `000001` | `000001.SZ` |
+| `300750` | `300750.SZ` |
+
+后缀复用 `getCNExchangePrefix`：代码首位 `5/6/9/11/13` → `.SH`，其余 → `.SZ`。
+
+完整示例：
+
+```
+/api/eastmoney/api/data/v1/get?reportName=RPT_VALUEANALYSIS_DET&columns=ALL&sortColumns=TRADE_DATE&sortTypes=-1&pageSize=5000&filter=%28SECUCODE%3D%22300750.SZ%22%29
+```
+
+### 8A.2 返回结构
+
+标准 JSON：
+
+```js
+{
+  success: true,
+  code: 0,
+  result: {
+    pages: 1,             // pageSize=5000 时通常一页装下
+    count: 1935,          // 总记录数 ≈ 上市以来交易日数（示例：宁德时代约 1900+ 条）
+    data: [ { ...逐日估值 }, ... ]   // 按 TRADE_DATE 倒序
+  }
+}
+```
+
+`result.data[]` 每条的关键字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `TRADE_DATE` | 交易日，形如 `2026-06-03 00:00:00` |
+| `PE_TTM` | 滚动市盈率（TTM）—— **算分位用此字段** |
+| `PE_LAR` | 市盈率（最新年报口径） |
+| `PB_MRQ` | 市净率（最新报告期） |
+| `PS_TTM` | 市销率（TTM） |
+| `CLOSE_PRICE` | 当日收盘价 |
+| `TOTAL_MARKET_CAP` | 总市值 |
+| `SECURITY_NAME_ABBR` | 证券简称 |
+
+### 8A.3 项目解析输出
+
+`getValuationHistory` 过滤后返回（仅保留有效 PE）：
+
+```js
+[ { date: 'YYYY-MM-DD', peTTM: number }, ... ]   // 倒序，最新在前
+```
+
+失败或非 A 股返回 `null`，不阻断主流程。
+
 ## 9. 指标计算公式
 
 ### 9.1 实时涨跌额
@@ -702,6 +783,34 @@ quotebridge_v6_realhead_{prefix}_{symbol}_last({
 - 数据源：`getStockKLine(symbol, market, 'monthly', 'hfq')`
 - `N=24/36/60/120/240`
 
+### 9.6A PE 历史分位（仅 A 股）
+
+实现：`src/utils/stockStats.js` 的 `pePercentiles(history, asOfDate)`。数据源为 `getValuationHistory` 返回的每日 `peTTM` 序列。
+
+```txt
+当前 PE = history[0].peTTM   // 最新一条
+某窗口分位(%) = 窗口内 peTTM ≤ 当前 PE 的天数 / 窗口内总天数 * 100
+```
+
+窗口：近 1 / 3 / 5 / 10 年（用 `asOfDate` 往前推算窗口起点）。
+
+- 分位越低，代表当前估值在历史中相对越便宜。
+- **样本不足保护**：若历史数据没有回溯到接近窗口起点（留半年容差）或窗口内样本 < 30，则该窗口返回 `null`（前端展示"样本不足"），不杜撰长周期分位。例如某股仅上市 8 年，近 10 年分位返回 `null`。
+
+### 9.6B 成交活跃度（量能）
+
+实现：`src/utils/stockStats.js` 的 `volumeStats(klineData)`。数据源为日 K 线（`getStockKLine` daily）的 `volume` 字段，取最近约 250 个交易日。
+
+```txt
+年均量 avgVol      = 近 250 日 volume 平均
+量比 recentRatio   = 近 5 日均量 / 年均量          // >1 表示近期放量
+当前量分位(%)      = 近 250 日中 volume ≤ 最新一日 volume 的占比 * 100
+```
+
+样本不足（有效天数 < 20 或年均量为 0）时返回 `null`。
+
+> 9.6A / 9.6B 两组指标当前仅用于拼入发送给 AI 的分析内容（见 `src/utils/aiPrompt.js`），不在页面 UI 渲染。
+
 ### 9.7 财务指标图表
 
 公司解析页财务图不是“接口现成指标”，而是把财务页里的原始表格行重新映射后绘图：
@@ -764,11 +873,12 @@ Yahoo 的 `hfq` 在当前实现中只替换 `close`，不会同步替换 `open/h
 
 如需继续维护，优先看这些文件：
 
-- [src/api/stock.js](/Users/ltc/Desktop/front-stock/src/api/stock.js)
+- [src/api/stock.js](/Users/ltc/Desktop/front-stock/src/api/stock.js) — 行情 / K 线 / 搜索 / realhead 指标 / 东财历史估值
+- [src/utils/stockStats.js](/Users/ltc/Desktop/front-stock/src/utils/stockStats.js) — PE 历史分位、成交活跃度纯函数
 - [src/views/StockDetail.vue](/Users/ltc/Desktop/front-stock/src/views/StockDetail.vue)
 - [src/views/CompanyParser.vue](/Users/ltc/Desktop/front-stock/src/views/CompanyParser.vue)
-- [vite.config.js](/Users/ltc/Desktop/front-stock/vite.config.js)
-- [api/[...path].js](/Users/ltc/Desktop/front-stock/api/[...path].js)
+- [vite.config.js](/Users/ltc/Desktop/front-stock/vite.config.js) — dev 代理（含 `/api/eastmoney`、`/api/ai-proxy`）
+- [api/[...path].js](/Users/ltc/Desktop/front-stock/api/[...path].js) / [functions/api/[[path]].js](/Users/ltc/Desktop/front-stock/functions/api/[[path]].js) / [server.js](/Users/ltc/Desktop/front-stock/server.js) — 部署代理
 
 ## 13. 后续可补充项
 

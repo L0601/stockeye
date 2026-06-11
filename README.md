@@ -31,10 +31,13 @@
   - A股: 新浪财经API、腾讯财经API
   - 港股/美股: 新浪财经API
 
-## 接口文档
+## 项目文档
 
-- [API_DOCUMENTATION.md](/Users/ltc/Desktop/front-stock/API_DOCUMENTATION.md): 详细说明各页面指标对应的接口、入参与返回字段、三地市场代码规则、涨跌幅与区间涨跌计算方式
-- [DATA_SOURCES.md](/Users/ltc/Desktop/front-stock/DATA_SOURCES.md): 公司解析页的数据源摘要
+文档统一放在 [docs/](docs/) 目录：
+
+- [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md): 详细说明各页面指标对应的接口、入参与返回字段、三地市场代码规则、涨跌幅与区间涨跌计算方式
+- [市场交易时段与判断逻辑.md](docs/市场交易时段与判断逻辑.md): A股/港股/美股品种识别、交易时段（北京时间）、开盘/午休/休市状态判断逻辑
+- [todo.md](docs/todo.md): 需求与待办记录
 
 ## 快速开始
 
