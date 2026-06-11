@@ -146,6 +146,15 @@ const proxyConfig = {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
     }
   },
+  '/api/eastmoney': {
+    target: 'https://datacenter-web.eastmoney.com',
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/api\/eastmoney/, ''),
+    headers: {
+      'Referer': 'https://data.eastmoney.com/',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+    }
+  },
   '/api/qq': {
     target: 'https://web.ifzq.gtimg.cn',
     changeOrigin: true,

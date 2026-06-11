@@ -14,8 +14,10 @@ const SYSTEM_PROMPT = `你是一位资深的证券分析师，熟悉 A 股、港
 3. 数据口径说明（务必据此理解，不要混淆）：
    - 涨跌幅按区间起止价的收盘价口径计算；但最新一期的"现价端"为该交易日的最近成交价，若当日尚未收盘则为盘中实时价、并非最终收盘价。
    - 1 年及以内的涨幅按【前复权】口径计算，2 年及以上的涨幅按【后复权】口径计算。
+   - PE 历史分位为当前 PE-TTM 在该周期历史分布中的百分位，越低代表估值相对越便宜；仅 A 股提供，港股/美股暂无该数据。
+   - 成交活跃度中的"量比"为近 5 日均量 / 近一年日均量，>1 表示近期放量。
    - 页面行情数据约有 30 分钟延迟。
-4. 结论要给出明确判断和理由，避免空泛套话。`
+4. 结论要给出明确判断和理由，避免空泛套话；估值判断请结合 PE 历史分位。`
 
 // 根据是否盘中、当前日期，生成对"最新价是否为收盘价"的明确提示
 function buildContextNote({ marketOpen, dateStr }) {
@@ -30,10 +32,11 @@ function buildContextNote({ marketOpen, dateStr }) {
 }
 
 // 构造发送给模型的消息数组
-export function buildAnalysisMessages(displayText, { name, marketOpen = false, dateStr = '' } = {}) {
+export function buildAnalysisMessages(displayText, { name, marketOpen = false, dateStr = '', extraData = '' } = {}) {
   const title = name ? `股票【${name}】` : '该股票'
   const note = buildContextNote({ marketOpen, dateStr })
-  const userContent = `请分析${title}。\n\n${note}\n\n以下是页面解析到的全部数据：\n\n${displayText || ''}`
+  const extra = extraData ? `\n\n补充指标：\n${extraData}` : ''
+  const userContent = `请分析${title}。\n\n${note}\n\n以下是页面解析到的全部数据：\n\n${displayText || ''}${extra}`
   return [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userContent }

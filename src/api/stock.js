@@ -392,6 +392,27 @@ export async function getStockKLine(symbol, market, period = 'daily', adjust = A
   }
 }
 
+// 获取 A 股历史每日估值（东方财富数据中心），返回 PE-TTM 时间序列（按日期倒序）
+// 仅 A 股有此数据源；其它市场返回 null。用于计算 PE 历史分位
+export async function getValuationHistory(symbol, market) {
+  if (market !== MARKET_TYPE.CN) return null
+  try {
+    const code = String(symbol || '').trim()
+    const secucode = `${code}.${getCNExchangePrefix(code).toUpperCase()}`
+    const filter = encodeURIComponent(`(SECUCODE="${secucode}")`)
+    const url = `/api/eastmoney/api/data/v1/get?reportName=RPT_VALUEANALYSIS_DET&columns=ALL&sortColumns=TRADE_DATE&sortTypes=-1&pageSize=5000&filter=${filter}`
+    const response = await request.get(url)
+    const list = response.data?.result?.data
+    if (!Array.isArray(list)) return null
+    return list
+      .map(item => ({ date: String(item.TRADE_DATE || '').slice(0, 10), peTTM: Number(item.PE_TTM) }))
+      .filter(d => d.date && Number.isFinite(d.peTTM))
+  } catch (error) {
+    console.error('获取历史估值失败:', error)
+    return null
+  }
+}
+
 function mapUSKLineQuery(period) {
   if (period === 'monthly') return 'interval=1mo&range=20y'
   if (period === 'quarterly') return 'interval=3mo&range=20y'

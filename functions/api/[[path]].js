@@ -7,6 +7,7 @@ const PROXY_MAP = {
   'ths-basic':      { target: 'https://basic.10jqka.com.cn',     referer: 'https://stockpage.10jqka.com.cn/' },
   'ths-basic-html': { target: 'https://basic.10jqka.com.cn',     referer: 'https://stockpage.10jqka.com.cn/', followRedirects: true },
   yahoo:            { target: 'https://query1.finance.yahoo.com', referer: 'https://finance.yahoo.com/' },
+  eastmoney:        { target: 'https://datacenter-web.eastmoney.com', referer: 'https://data.eastmoney.com/' },
 }
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'

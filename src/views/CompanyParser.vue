@@ -288,9 +288,10 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { marked } from 'marked'
-import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, isMarketOpen, MARKET_TYPE } from '@/api/stock'
+import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, getValuationHistory, isMarketOpen, MARKET_TYPE } from '@/api/stock'
 import { streamChatCompletion } from '@/api/ai'
 import { buildAnalysisMessages } from '@/utils/aiPrompt'
+import { pePercentiles, volumeStats } from '@/utils/stockStats'
 import { aiSettings } from '@/utils/storage'
 import FinanceChart from '@/components/FinanceChart.vue'
 import AiSettingsModal from '@/components/AiSettingsModal.vue'
@@ -307,6 +308,7 @@ const financeData = ref(null)
 const klineData = ref([])
 const monthlyKlineData = ref([])
 const indicatorMonthlyKlineData = ref([])
+const valuationHistory = ref(null) // A股历史 PE-TTM 序列（喂 AI 算分位用）
 const visibleSeries = ref({
   revenue: true,
   profit: true,
@@ -773,6 +775,7 @@ const handleFetch = async () => {
   klineData.value = []
   monthlyKlineData.value = []
   indicatorMonthlyKlineData.value = []
+  valuationHistory.value = null
   visibleSeries.value = {
     revenue: true,
     profit: true,
@@ -786,16 +789,18 @@ const handleFetch = async () => {
 
   loading.value = true
   try {
-    const [metrics, financeHtml, kline, monthlyKline, indicatorMonthlyKline] = await Promise.all([
+    const [metrics, financeHtml, kline, monthlyKline, indicatorMonthlyKline, valuation] = await Promise.all([
       getCompanyMetrics(symbol.value, market.value),
       getFinancePage(symbol.value, market.value),
       getStockKLine(symbol.value, market.value),
       getStockKLine(symbol.value, market.value, 'monthly'),
-      getStockKLine(symbol.value, market.value, 'monthly', 'hfq')
+      getStockKLine(symbol.value, market.value, 'monthly', 'hfq'),
+      getValuationHistory(symbol.value, market.value)
     ])
     klineData.value = kline || []
     monthlyKlineData.value = monthlyKline || []
     indicatorMonthlyKlineData.value = indicatorMonthlyKline || []
+    valuationHistory.value = valuation || null
     if (financeHtml) {
       financeData.value = parseFinanceHtml(financeHtml)
     }
@@ -870,6 +875,27 @@ let aiController = null
 // 流式文本按 Markdown 渲染，便于展示分段结论
 const aiAnalysisHtml = computed(() => (aiAnalysis.value ? marked.parse(aiAnalysis.value) : ''))
 
+// 组装喂给 AI 的补充指标（成交活跃度 + PE 历史分位），不在页面 UI 展示
+const fmtPct = (v) => (v === null || v === undefined ? '样本不足' : `${v.toFixed(1)}%`)
+const buildAiExtraData = (dateStr) => {
+  const lines = []
+  const vs = volumeStats(klineData.value)
+  if (vs) {
+    lines.push(`成交活跃度：近一年日均成交量 ${formatLarge(vs.avgVol)}，量比(近5日均量/年均量) ${vs.recentRatio.toFixed(2)} 倍，当前成交量处于近一年 ${fmtPct(vs.currentPercentile)} 分位`)
+  }
+  if (market.value === MARKET_TYPE.CN) {
+    const pe = pePercentiles(valuationHistory.value, dateStr)
+    if (pe) {
+      lines.push(`PE历史分位（PE-TTM，当前 ${pe.current.toFixed(2)}）：近1年 ${fmtPct(pe.p1y)}，近3年 ${fmtPct(pe.p3y)}，近5年 ${fmtPct(pe.p5y)}，近10年 ${fmtPct(pe.p10y)}（分位越低估值越偏低）`)
+    } else {
+      lines.push('PE历史分位：暂无历史估值数据')
+    }
+  } else {
+    lines.push('PE历史分位：暂无历史估值数据（仅 A 股提供）')
+  }
+  return lines.join('\n')
+}
+
 // 调用模型分析：复用 displayText 作为数据源，流式写入 aiAnalysis
 const runAiAnalysis = async () => {
   aiConfigured.value = aiSettings.isValid()
@@ -888,7 +914,8 @@ const runAiAnalysis = async () => {
   const messages = buildAnalysisMessages(displayText.value, {
     name: result.value?.name,
     marketOpen: isMarketOpen(market.value),
-    dateStr
+    dateStr,
+    extraData: buildAiExtraData(dateStr)
   })
   try {
     await streamChatCompletion(aiSettings.getConfig(), messages, {

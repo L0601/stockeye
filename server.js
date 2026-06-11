@@ -52,6 +52,17 @@ app.use('/api/sina', createProxyMiddleware({
   }
 }))
 
+// 代理东方财富数据中心（A股历史估值/PE分位）
+app.use('/api/eastmoney', createProxyMiddleware({
+  target: 'https://datacenter-web.eastmoney.com',
+  changeOrigin: true,
+  pathRewrite: { '^/api/eastmoney': '' },
+  headers: {
+    'Referer': 'https://data.eastmoney.com/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+  }
+}))
+
 // 代理腾讯财经API（获取K线数据）
 app.use('/api/qq', createProxyMiddleware({
   target: 'https://web.ifzq.gtimg.cn',
