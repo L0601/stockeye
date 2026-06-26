@@ -300,7 +300,7 @@ import { marked } from 'marked'
 import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, getValuationHistory, isMarketOpen, MARKET_TYPE } from '@/api/stock'
 import { streamChatCompletion } from '@/api/ai'
 import { buildAnalysisMessages, formatMessagesAsPrompt } from '@/utils/aiPrompt'
-import { pePercentiles, volumeStats } from '@/utils/stockStats'
+import { metricPercentiles, volumeStats, maStats, priceRangeStats, riskStats, computeYoY } from '@/utils/stockStats'
 import { aiSettings } from '@/utils/storage'
 import FinanceChart from '@/components/FinanceChart.vue'
 import AiSettingsModal from '@/components/AiSettingsModal.vue'
@@ -884,27 +884,81 @@ let aiController = null
 // 流式文本按 Markdown 渲染，便于展示分段结论
 const aiAnalysisHtml = computed(() => (aiAnalysis.value ? marked.parse(aiAnalysis.value) : ''))
 
-// 组装喂给 AI 的补充指标（成交活跃度 + PE 历史分位），不在页面 UI 展示
+// 组装喂给 AI 的补充指标（成交/趋势/估值/风险/财务增速），不在页面 UI 展示
 const fmtPct = (v) => (v === null || v === undefined ? '样本不足' : `${v.toFixed(1)}%`)
-const buildAiExtraData = (dateStr) => {
-  const lines = []
+const fmtSigned = (v) => (v === null || v === undefined ? '-' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`)
+const fmtX = (v) => (Number.isFinite(v) ? `${v.toFixed(2)}倍` : '-')
+
+// 成交活跃度：年均量 + 量比 + 分位 + 当日量相对 MA5/10/20 倍数
+const buildVolumeLine = () => {
   const vs = volumeStats(klineData.value)
-  if (vs) {
-    // A 股 K 线成交量单位为「手」(1 手=100 股)，港股/美股为「股」，须显式标注避免 AI 误判量级
-    const volUnit = market.value === MARKET_TYPE.CN ? '手（1手=100股）' : '股'
-    lines.push(`成交活跃度：近一年日均成交量 ${formatLarge(vs.avgVol)}${volUnit}，量比(近5日均量/年均量) ${vs.recentRatio.toFixed(2)} 倍，当前成交量处于近一年 ${fmtPct(vs.currentPercentile)} 分位`)
-  }
-  if (market.value === MARKET_TYPE.CN) {
-    const pe = pePercentiles(valuationHistory.value, dateStr)
-    if (pe) {
-      lines.push(`PE历史分位（PE-TTM，当前 ${pe.current.toFixed(2)}）：近1年 ${fmtPct(pe.p1y)}，近3年 ${fmtPct(pe.p3y)}，近5年 ${fmtPct(pe.p5y)}，近10年 ${fmtPct(pe.p10y)}（分位越低估值越偏低）`)
-    } else {
-      lines.push('PE历史分位：暂无历史估值数据')
-    }
-  } else {
-    lines.push('PE历史分位：暂无历史估值数据（仅 A 股提供）')
-  }
-  return lines.join('\n')
+  if (!vs) return null
+  // A 股 K 线成交量单位为「手」(1 手=100 股)，港股/美股为「股」，须显式标注避免 AI 误判量级
+  const unit = market.value === MARKET_TYPE.CN ? '手（1手=100股）' : '股'
+  return `成交活跃度：近一年日均成交量 ${formatLarge(vs.avgVol)}${unit}，量比(近5日均量/年均量) ${vs.recentRatio.toFixed(2)} 倍，当前量处于近一年 ${fmtPct(vs.currentPercentile)} 分位；当日量/MA5=${fmtX(vs.currentVsMa5)}、/MA10=${fmtX(vs.currentVsMa10)}、/MA20=${fmtX(vs.currentVsMa20)}（>1放量，<1缩量）`
+}
+
+// 均线体系：各 MA 值、当前价偏离%、多空排列
+const buildMaLine = () => {
+  const ma = maStats(klineData.value)
+  if (!ma) return null
+  const parts = ma.mas.map(m => `MA${m.period}=${m.value.toFixed(2)}(偏离${fmtSigned(m.deviation)})`)
+  return `均线体系(前复权收盘)：当前 ${ma.current.toFixed(2)}，${parts.join('，')}；均线排列：${ma.arrangement}`
+}
+
+// 价格位置：近一年高低点 + 当前价位置
+const buildRangeLine = () => {
+  const r = priceRangeStats(klineData.value)
+  if (!r) return null
+  return `价格位置(近一年)：最高 ${r.high.toFixed(2)} 最低 ${r.low.toFixed(2)}，当前距高点 ${fmtSigned(r.fromHigh)}、距低点 ${fmtSigned(r.fromLow)}，处于区间 ${fmtPct(r.position)} 位置`
+}
+
+// 风险：年化波动率 + 最大回撤
+const buildRiskLine = () => {
+  const r = riskStats(klineData.value)
+  if (!r) return null
+  return `风险指标(近一年)：年化波动率 ${(r.annualVol * 100).toFixed(1)}%，最大回撤 ${(r.maxDrawdown * 100).toFixed(1)}%`
+}
+
+// 估值历史分位：A 股提供 PE/PB/PS，其它市场无
+const buildValuationLines = (dateStr) => {
+  if (market.value !== MARKET_TYPE.CN) return ['估值历史分位：暂无历史估值数据（仅 A 股提供）']
+  const fmtRow = (label, p) => p
+    ? `${label}（当前 ${p.current.toFixed(2)}）：近1年 ${fmtPct(p.p1y)}，近3年 ${fmtPct(p.p3y)}，近5年 ${fmtPct(p.p5y)}，近10年 ${fmtPct(p.p10y)}`
+    : null
+  const rows = [
+    fmtRow('PE历史分位(PE-TTM)', metricPercentiles(valuationHistory.value, dateStr, 'peTTM')),
+    fmtRow('PB历史分位', metricPercentiles(valuationHistory.value, dateStr, 'pb')),
+    fmtRow('PS历史分位(PS-TTM)', metricPercentiles(valuationHistory.value, dateStr, 'psTTM'))
+  ].filter(Boolean)
+  if (!rows.length) return ['估值历史分位：暂无历史估值数据']
+  return ['估值历史分位（分位越低估值越偏低）：', ...rows.map(r => `· ${r}`)]
+}
+
+// 财务同比增速：按报告期对齐上年同期算营收/净利 YoY（用全量数据匹配，展示过滤后期次）
+const buildGrowthLine = () => {
+  const full = financeData.value
+  const view = filteredFinanceData.value
+  if (!full?.periods?.length || !view?.periods?.length) return null
+  const revYoY = computeYoY(full.periods, pickFinanceRow(full.rows, ['营业收入', '营业总收入']))
+  const profitYoY = computeYoY(full.periods, pickFinanceRow(full.rows, ['归母净利润', '净利润']))
+  const parts = view.periods.map((p) => {
+    const i = full.periods.indexOf(p)
+    if (i < 0 || (revYoY[i] === null && profitYoY[i] === null)) return null
+    return `${p} 营收YoY ${fmtSigned(revYoY[i])} 净利YoY ${fmtSigned(profitYoY[i])}`
+  }).filter(Boolean)
+  return parts.length ? `财务同比增速：${parts.join('；')}` : null
+}
+
+const buildAiExtraData = (dateStr) => {
+  return [
+    buildVolumeLine(),
+    buildMaLine(),
+    buildRangeLine(),
+    buildRiskLine(),
+    ...buildValuationLines(dateStr),
+    buildGrowthLine()
+  ].filter(Boolean).join('\n')
 }
 
 // 构造当前股票的分析消息：盘中时 K 线最后一根为实时价而非收盘价，需告知模型避免误判
