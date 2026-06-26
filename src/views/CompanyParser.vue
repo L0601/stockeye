@@ -890,7 +890,9 @@ const buildAiExtraData = (dateStr) => {
   const lines = []
   const vs = volumeStats(klineData.value)
   if (vs) {
-    lines.push(`成交活跃度：近一年日均成交量 ${formatLarge(vs.avgVol)}，量比(近5日均量/年均量) ${vs.recentRatio.toFixed(2)} 倍，当前成交量处于近一年 ${fmtPct(vs.currentPercentile)} 分位`)
+    // A 股 K 线成交量单位为「手」(1 手=100 股)，港股/美股为「股」，须显式标注避免 AI 误判量级
+    const volUnit = market.value === MARKET_TYPE.CN ? '手（1手=100股）' : '股'
+    lines.push(`成交活跃度：近一年日均成交量 ${formatLarge(vs.avgVol)}${volUnit}，量比(近5日均量/年均量) ${vs.recentRatio.toFixed(2)} 倍，当前成交量处于近一年 ${fmtPct(vs.currentPercentile)} 分位`)
   }
   if (market.value === MARKET_TYPE.CN) {
     const pe = pePercentiles(valuationHistory.value, dateStr)
