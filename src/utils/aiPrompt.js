@@ -42,3 +42,11 @@ export function buildAnalysisMessages(displayText, { name, marketOpen = false, d
     { role: 'user', content: userContent }
   ]
 }
+
+// 将消息数组拼成可直接复制粘贴的纯文本 prompt（便于在外部 AI 中复用）
+const ROLE_LABELS = { system: '系统提示', user: '用户输入', assistant: '助手' }
+export function formatMessagesAsPrompt(messages = []) {
+  return messages
+    .map((m) => `【${ROLE_LABELS[m.role] || m.role}】\n${m.content}`)
+    .join('\n\n')
+}

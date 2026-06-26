@@ -252,14 +252,23 @@
       <section class="panel ai-panel">
         <div class="panel-header">
           <h2>AI 分析</h2>
-          <button
-            v-if="aiConfigured"
-            class="action-btn ghost"
-            :disabled="aiLoading"
-            @click="runAiAnalysis"
-          >
-            {{ aiLoading ? '分析中...' : '重新分析' }}
-          </button>
+          <div class="ai-actions">
+            <button
+              v-if="displayText"
+              class="action-btn ghost"
+              @click="copyPrompt"
+            >
+              复制 prompt
+            </button>
+            <button
+              v-if="aiConfigured"
+              class="action-btn ghost"
+              :disabled="aiLoading"
+              @click="runAiAnalysis"
+            >
+              {{ aiLoading ? '分析中...' : '重新分析' }}
+            </button>
+          </div>
         </div>
 
         <div class="ai-body">
@@ -290,7 +299,7 @@ import { useMessage } from 'naive-ui'
 import { marked } from 'marked'
 import { getCompanyMetrics, getCompanyPage, getFinancePage, getStockKLine, getValuationHistory, isMarketOpen, MARKET_TYPE } from '@/api/stock'
 import { streamChatCompletion } from '@/api/ai'
-import { buildAnalysisMessages } from '@/utils/aiPrompt'
+import { buildAnalysisMessages, formatMessagesAsPrompt } from '@/utils/aiPrompt'
 import { pePercentiles, volumeStats } from '@/utils/stockStats'
 import { aiSettings } from '@/utils/storage'
 import FinanceChart from '@/components/FinanceChart.vue'
@@ -896,6 +905,18 @@ const buildAiExtraData = (dateStr) => {
   return lines.join('\n')
 }
 
+// 构造当前股票的分析消息：盘中时 K 线最后一根为实时价而非收盘价，需告知模型避免误判
+const buildCurrentMessages = () => {
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return buildAnalysisMessages(displayText.value, {
+    name: result.value?.name,
+    marketOpen: isMarketOpen(market.value),
+    dateStr,
+    extraData: buildAiExtraData(dateStr)
+  })
+}
+
 // 调用模型分析：复用 displayText 作为数据源，流式写入 aiAnalysis
 const runAiAnalysis = async () => {
   aiConfigured.value = aiSettings.isValid()
@@ -908,15 +929,7 @@ const runAiAnalysis = async () => {
   aiError.value = ''
   aiLoading.value = true
 
-  // 盘中时 K 线最后一根为实时价而非收盘价，需告知模型避免误判
-  const now = new Date()
-  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const messages = buildAnalysisMessages(displayText.value, {
-    name: result.value?.name,
-    marketOpen: isMarketOpen(market.value),
-    dateStr,
-    extraData: buildAiExtraData(dateStr)
-  })
+  const messages = buildCurrentMessages()
   try {
     await streamChatCompletion(aiSettings.getConfig(), messages, {
       onDelta: (delta) => { aiAnalysis.value += delta },
@@ -976,23 +989,33 @@ const toggleSeries = (key) => {
 }
 
 
-const handleCopy = async () => {
-  if (!displayText.value) return
+// 复制文本到剪贴板：优先 Clipboard API，失败时回退到 execCommand
+const copyToClipboard = async (text) => {
   try {
-    await navigator.clipboard.writeText(displayText.value)
-    message.success('已复制到剪贴板')
+    await navigator.clipboard.writeText(text)
   } catch (err) {
     console.error(err)
     const textarea = document.createElement('textarea')
-    textarea.value = displayText.value
+    textarea.value = text
     textarea.style.position = 'fixed'
     textarea.style.opacity = '0'
     document.body.appendChild(textarea)
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
-    message.success('已复制到剪贴板')
   }
+  message.success('已复制到剪贴板')
+}
+
+const handleCopy = () => {
+  if (!displayText.value) return
+  copyToClipboard(displayText.value)
+}
+
+// 复制完整 prompt（系统提示 + 用户输入），便于在外部 AI 中复用
+const copyPrompt = () => {
+  if (!displayText.value) return
+  copyToClipboard(formatMessagesAsPrompt(buildCurrentMessages()))
 }
 </script>
 
@@ -1112,6 +1135,11 @@ const handleCopy = async () => {
 .ai-panel .panel-header {
   flex: 0 0 auto;
   margin-bottom: 16px;
+}
+
+.ai-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .ai-body {

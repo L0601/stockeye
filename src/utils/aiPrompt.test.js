@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAnalysisMessages } from './aiPrompt.js'
+import { buildAnalysisMessages, formatMessagesAsPrompt } from './aiPrompt.js'
 
 describe('buildAnalysisMessages', () => {
   it('builds_system_and_user_messages_with_correct_roles', () => {
@@ -44,5 +44,22 @@ describe('buildAnalysisMessages', () => {
     const user = buildAnalysisMessages('数据', { marketOpen: false, dateStr: '2026-06-03' })[1].content
     expect(user).toContain('收盘价')
     expect(user).not.toContain('盘中实时价')
+  })
+})
+
+describe('formatMessagesAsPrompt', () => {
+  it('flattens_messages_into_labeled_copyable_text', () => {
+    const text = formatMessagesAsPrompt(buildAnalysisMessages('涨幅 5%', { name: '贵州茅台' }))
+    // 含角色标签，且系统提示在用户输入之前
+    expect(text).toContain('【系统提示】')
+    expect(text).toContain('【用户输入】')
+    expect(text.indexOf('【系统提示】')).toBeLessThan(text.indexOf('【用户输入】'))
+    // 原始内容被完整保留
+    expect(text).toContain('贵州茅台')
+    expect(text).toContain('涨幅 5%')
+  })
+
+  it('returns_empty_string_for_no_messages', () => {
+    expect(formatMessagesAsPrompt([])).toBe('')
   })
 })
